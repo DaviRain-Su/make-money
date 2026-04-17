@@ -1,5 +1,6 @@
 import io
 import json
+import sys
 import unittest
 from contextlib import redirect_stdout
 from unittest.mock import patch
@@ -8,6 +9,16 @@ from agent_trader.cli import main
 
 
 class CLITests(unittest.TestCase):
+    def test_main_uses_sys_argv_when_no_argv_is_provided(self):
+        fake_daemon = type("FakeDaemon", (), {"run_once": lambda self, send_ping=False: None, "last_error": None})()
+        with patch.object(sys, "argv", ["cli.py", "runtime-once"]), patch("agent_trader.cli.build_runtime_daemon", return_value=fake_daemon):
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                exit_code = main()
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("runtime-once complete", buf.getvalue())
+
     def test_demo_smoke_command_prints_json_summary(self):
         payload = {
             "side": "buy",
@@ -30,7 +41,7 @@ class CLITests(unittest.TestCase):
         self.assertEqual(parsed["summary"]["order_id"], "123")
 
     def test_runtime_once_command_runs_daemon_once(self):
-        fake_daemon = type("FakeDaemon", (), {"run_once": lambda self, send_ping=False: None})()
+        fake_daemon = type("FakeDaemon", (), {"run_once": lambda self, send_ping=False: None, "last_error": None})()
         with patch("agent_trader.cli.build_runtime_daemon", return_value=fake_daemon):
             buf = io.StringIO()
             with redirect_stdout(buf):
@@ -38,6 +49,16 @@ class CLITests(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
         self.assertIn("runtime-once complete", buf.getvalue())
+
+    def test_runtime_once_returns_error_when_daemon_records_failure(self):
+        fake_daemon = type("FakeDaemon", (), {"run_once": lambda self, send_ping=False: None, "last_error": "ws failed"})()
+        with patch("agent_trader.cli.build_runtime_daemon", return_value=fake_daemon):
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                exit_code = main(["runtime-once"])
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("runtime-once failed: ws failed", buf.getvalue())
 
     def test_invalid_command_returns_nonzero(self):
         buf = io.StringIO()

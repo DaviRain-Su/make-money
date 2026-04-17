@@ -121,6 +121,72 @@ strategy_runner.run_strategy_once(client, symbols, bar, limit, config, dispatch)
 3. 观察 `strategy_poll` 审计事件 + 被风控拦下的信号，确认策略不会和风控打架
 4. 再把 `EXECUTION_ENABLED=true`
 
+## 和 freqtrade 集成
+
+[freqtrade](https://www.freqtrade.io/) 的强项是策略 R&D：回测、Hyperopt、上百个社区策略、FreqAI。我们的强项是 OKX 原生深度 + 硬风控 + 面向 AI agent 的管理面 + cross-margin 多合约安全网。把两个串起来各取所长：**freqtrade 发信号，agent_trader 下单。**
+
+**做法**：freqtrade 用 webhook 推到我们的 `POST /signal/freqtrade`，我们自带一个 adapter 把 freqtrade 的字段（`pair` / `direction` / `open_rate` / `stop_loss` / `leverage` / `exit_reason`…）翻译成内部 `/signal` 格式，风控和审计完全一致。
+
+- pair 映射：`BTC/USDT` 或 `BTC/USDT:USDT` → `BTC-USDT-SWAP`（已是 `X-Y-SWAP` 格式则原样透传）
+- 方向：`long` → `buy`，`short` → `sell`；exit 事件自动翻转方向并把 `position_action` 置为 `CLOSE`
+- 止损：优先用 payload 里的 `stop_loss`；没传则 `stop_loss_pct` 换算；再没有就默认 2% 兜底
+- 止盈：payload 没传时按 3R 倒推（`stop_distance * 3`）
+- `client_signal_id = "freqtrade:{trade_id}:{OPEN/CLOSE}:{symbol}:{side}"`，天然幂等
+
+**freqtrade 端 `config.json` 示例**：
+
+```json
+{
+  "webhook": {
+    "enabled": true,
+    "url": "http://127.0.0.1:8787/signal/freqtrade",
+    "format": "json",
+    "retries": 3,
+    "retry_delay": 1,
+    "webhookentry": {
+      "type": "entry",
+      "trade_id": "{trade_id}",
+      "pair": "{pair}",
+      "direction": "{direction}",
+      "open_rate": "{open_rate}",
+      "leverage": "{leverage}",
+      "stop_loss": "{stop_loss}",
+      "stop_loss_pct": "{stop_loss_pct}",
+      "enter_tag": "{enter_tag}"
+    },
+    "webhookexit": {
+      "type": "exit",
+      "trade_id": "{trade_id}",
+      "pair": "{pair}",
+      "direction": "{direction}",
+      "close_rate": "{close_rate}",
+      "exit_reason": "{exit_reason}"
+    }
+  }
+}
+```
+
+如果你设置了 `SIGNAL_SHARED_SECRET`，freqtrade 还要在 `webhook` 块里加 `"headers": {"x-signal-secret": "你的密钥"}`。
+
+**运行时拓扑**：
+```
+freqtrade (容器 A，负责策略)       agent_trader (容器 B，负责执行+风控)
+──────────────────────────        ────────────────────────────────
+populate_entry_trend              POST /signal/freqtrade
+populate_exit_trend               ↓
+enter/exit webhook fires  ──────> translate_freqtrade_webhook
+                                   ↓
+                                   /signal 管线：幂等 → 风控 → 执行 → 审计
+                                   ↓
+                                   OKX
+```
+
+两个容器独立：freqtrade 挂了，已开仓位不会失控；agent_trader 挂了，freqtrade 就停止接单。两个系统共用一份审计日志（由 agent_trader 写）。
+
+**可选的其他用法**：
+- 只用 freqtrade 回测，不实盘运行——选出参数后把策略抄到我们的 `strategy.py`
+- 只用 agent_trader 的风控——freqtrade 继续自己下单到另一个账户，我们的 `/admin/manual_trade` 作为应急通道
+
 ## Hermes 管理面
 
 Hermes 跑在独立进程（不在这个 repo 里）。它只能通过 HMAC 签名的 HTTP 调用这里的服务，**既不持有 OKX 密钥，也改不了 `risk.py`**。

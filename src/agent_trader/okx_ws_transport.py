@@ -28,12 +28,12 @@ class AsyncWebSocketTransport:
 
     async def send(self, payload: Any) -> None:
         if self.connection is None:
-            raise RuntimeError("websocket not connected")
+            await self.connect()
         await self.connection.send(payload)
 
     async def recv(self) -> Any:
         if self.connection is None:
-            raise RuntimeError("websocket not connected")
+            await self.connect()
         return await self.connection.recv()
 
     async def close(self) -> None:

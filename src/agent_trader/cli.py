@@ -1,6 +1,7 @@
 import asyncio
 import inspect
 import json
+import sys
 from typing import List, Optional
 
 from agent_trader.config import load_settings
@@ -17,7 +18,7 @@ def _run_maybe_async(value):
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    args = list(argv or [])
+    args = list(sys.argv[1:] if argv is None else argv)
     if not args:
         print("usage: cli.py [runtime-once|demo-smoke <json-payload>]")
         return 2
@@ -28,6 +29,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     if command == "runtime-once":
         daemon = build_runtime_daemon(current_settings=settings, load_open_orders=lambda: [])
         _run_maybe_async(daemon.run_once(send_ping=True))
+        if getattr(daemon, "last_error", None):
+            print(f"runtime-once failed: {daemon.last_error}")
+            return 1
         print("runtime-once complete")
         return 0
 

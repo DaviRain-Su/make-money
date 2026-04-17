@@ -41,6 +41,19 @@ class AsyncWebSocketTransportTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(msg, {"event": "ok"})
         self.assertTrue(connection.closed)
 
+    async def test_send_auto_connects_when_needed(self):
+        connection = FakeConnection()
+
+        async def factory(url):
+            self.assertEqual(url, "wss://example")
+            return connection
+
+        transport = AsyncWebSocketTransport(url="wss://example", connect_fn=factory)
+        await transport.send({"login": 1})
+
+        self.assertIs(transport.connection, connection)
+        self.assertEqual(connection.sent, [{"login": 1}])
+
 
 if __name__ == "__main__":
     unittest.main()

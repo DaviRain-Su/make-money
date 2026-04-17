@@ -14,6 +14,7 @@ from agent_trader.okx_execution_service import execute_okx_trade_proposal
 from agent_trader.okx_ws import OKXWebSocketClient
 from agent_trader.proposal_service import build_trade_proposal
 from agent_trader.reconcile_job import reconcile_open_orders_job
+from agent_trader.freqtrade_adapter import translate_freqtrade_webhook
 from agent_trader.risk import evaluate_trade
 from agent_trader.signal_security import ensure_signal_not_duplicate, verify_signal_auth
 from agent_trader.strategy import EmaAtrConfig
@@ -753,6 +754,20 @@ try:
     @app.post("/signal")
     def submit_signal(payload: Dict[str, Any], x_signal_secret: Optional[str] = Header(default=None)) -> Dict[str, Any]:
         return process_signal_request_payload(payload, current_settings=get_settings(), auth_header=x_signal_secret)
+
+    @app.post("/signal/freqtrade")
+    def submit_freqtrade_signal(
+        payload: Dict[str, Any],
+        x_signal_secret: Optional[str] = Header(default=None),
+    ) -> Dict[str, Any]:
+        resolved = get_settings()
+        try:
+            signal_payload = translate_freqtrade_webhook(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return process_signal_request_payload(
+            signal_payload, current_settings=resolved, auth_header=x_signal_secret
+        )
 
     @app.get("/admin/status")
     def admin_status(

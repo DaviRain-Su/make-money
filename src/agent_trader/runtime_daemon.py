@@ -11,11 +11,10 @@ class RuntimeDaemon:
 
     async def run_once(self, send_ping: bool = False) -> None:
         self.running = True
+        self.last_error = None
         try:
-            await self.supervisor.run_forever(
+            await self.supervisor.run_iteration(
                 load_open_orders=self.load_open_orders,
-                should_continue=lambda: self.running,
-                sleep_fn=lambda _: _noop_sleep(),
                 send_ping=send_ping,
             )
         except Exception as exc:  # noqa: BLE001
