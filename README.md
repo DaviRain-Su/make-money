@@ -119,6 +119,12 @@ strategy_runner.run_strategy_once(client, symbols, bar, limit, config, dispatch)
 
 **可插拔信号生成器**：`signal_registry.register(name, fn)` 注册自定义策略，`STRATEGY_GENERATOR=name` 切换。函数签名 `(symbol, primary_candles, higher_tf_candles=None) -> Optional[StrategySignal]`。内置 `ema_atr` 在模块加载时自动注册。这是预留给未来 ML 策略 / 规则库 / 外部服务接入的口子，不引入任何硬依赖。
 
+**持仓感知**（默认开启）：轮询开始时拉一次账户快照，若 `positions_detail[symbol].side` 和新信号同方向，直接跳过。避免趋势中对同一合约重复加仓。平仓 / 反向信号不受此限。通过 `STRATEGY_SKIP_SAME_DIRECTION=false` 关闭。
+
+**基于 websocket 的低延迟触发**（可选，需要自己串线）：`okx_ws_candles.CandleStreamListener` 把 OKX 公共 ws 的 `candle{bar}` 推送转成回调，`confirmed=1` 时调你的 callback。把它接到 `run_strategy_once` 就能从 REST 轮询的分钟延迟降到秒级。REST 轮询仍作为兜底。
+
+**自动化 daemon**：`build_runtime_daemon(settings)` 在 `STRATEGY_ENABLED=true` 时自动挂上 scheduler，单进程 `await daemon.run_forever(...)` 同时跑 ws/reconcile loop + strategy loop，不再需要外部 cron。
+
 **周期性自动运行**：`build_strategy_scheduler(settings)` 返回一个 `StrategyScheduler`，`await scheduler.run_forever(should_continue)` 就会按 `STRATEGY_POLL_SECONDS` 自动循环。单次 runner 报错不会打挂循环，信号仍走 `/signal` 管线（风控 + 幂等 + 审计）。
 
 安全默认：`STRATEGY_ENABLED=false`。开启前建议：

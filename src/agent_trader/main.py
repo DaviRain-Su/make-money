@@ -690,6 +690,24 @@ def run_strategy_poll(
         from agent_trader.signal_registry import resolve as _resolve_gen
         selected_generator = _resolve_gen(resolved.strategy_generator)
         generator_name = resolved.strategy_generator
+    open_direction_map: Optional[Dict[str, str]] = None
+    if resolved.strategy_skip_same_direction:
+        try:
+            account_state = sync_okx_account_state(
+                client=active_client,
+                inst_id=resolved.okx_symbol,
+                ccy="USDT",
+                daily_pnl_pct=0.0,
+                symbol_scoped=False,
+            )
+            detail = account_state.positions_detail or {}
+            open_direction_map = {
+                sym: row.get("side")
+                for sym, row in detail.items()
+                if isinstance(row, dict) and row.get("side")
+            } or None
+        except Exception:  # noqa: BLE001
+            open_direction_map = None  # fail-open: if account sync fails, don't block strategy
     results = run_strategy_once(
         client=active_client,
         symbols=symbols,
@@ -700,6 +718,7 @@ def run_strategy_poll(
         higher_tf_bar=resolved.strategy_higher_tf_bar or None,
         signal_generator=selected_generator,
         strategy_name=generator_name,
+        open_direction_by_symbol=open_direction_map,
     )
     log_pipeline_event(
         "strategy_poll",

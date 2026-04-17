@@ -21,6 +21,7 @@ def run_strategy_once(
     higher_tf_candle_limit: Optional[int] = None,
     signal_generator: Optional[Callable[..., Any]] = None,
     strategy_name: str = "ema_atr_inline",
+    open_direction_by_symbol: Optional[Dict[str, str]] = None,
 ) -> List[Dict[str, Any]]:
     """For each symbol, fetch candles, run EMA/ATR, dispatch signal if any.
 
@@ -59,6 +60,18 @@ def run_strategy_once(
         if signal is None:
             results.append({"symbol": symbol, "status": "no_signal", "bars": len(candles)})
             continue
+        if open_direction_by_symbol:
+            existing = open_direction_by_symbol.get(symbol)
+            if existing and _same_direction(existing, signal.side):
+                results.append(
+                    {
+                        "symbol": symbol,
+                        "status": "same_direction_open_position",
+                        "side": signal.side,
+                        "open_direction": existing,
+                    }
+                )
+                continue
         bar_ts = candles[-1].ts if candles else 0
         request_payload = _signal_to_request_payload(signal, bar=bar, bar_ts=bar_ts)
         try:
@@ -101,3 +114,14 @@ def _signal_to_request_payload(signal, bar: str, bar_ts: int) -> Dict[str, Any]:
     payload = asdict(signal)
     payload["client_signal_id"] = f"ema_atr:{signal.symbol}:{bar}:{bar_ts}:{signal.side.lower()}"
     return payload
+
+
+
+def _same_direction(open_side: str, signal_side: str) -> bool:
+    os = (open_side or "").lower()
+    ss = (signal_side or "").lower()
+    if os == "long" and ss == "buy":
+        return True
+    if os == "short" and ss == "sell":
+        return True
+    return False

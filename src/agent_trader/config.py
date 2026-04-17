@@ -63,6 +63,8 @@ class Settings:
     # 信号生成器名字（对应 signal_registry 里注册的 key）；
     # 空 = 用默认的内置 ema_atr 参数路径
     strategy_generator: str = ""
+    # 同方向已有持仓时跳过新信号（防止一路加仓追高）
+    strategy_skip_same_direction: bool = True
     # freqtrade 反向 adapter
     freqtrade_api_url: str = ""
     freqtrade_api_username: str = ""
@@ -167,6 +169,7 @@ def load_settings() -> Settings:
         strategy_higher_tf_bar=os.getenv("STRATEGY_HIGHER_TF_BAR", ""),
         strategy_higher_tf_slow_ema=_int_env("STRATEGY_HIGHER_TF_SLOW_EMA", 0),
         strategy_generator=os.getenv("STRATEGY_GENERATOR", ""),
+        strategy_skip_same_direction=_bool_env("STRATEGY_SKIP_SAME_DIRECTION", True),
         freqtrade_api_url=os.getenv("FREQTRADE_API_URL", ""),
         freqtrade_api_username=os.getenv("FREQTRADE_API_USERNAME", ""),
         freqtrade_api_password=os.getenv("FREQTRADE_API_PASSWORD", ""),
