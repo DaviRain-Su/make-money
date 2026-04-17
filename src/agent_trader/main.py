@@ -719,6 +719,7 @@ def run_strategy_poll(
         signal_generator=selected_generator,
         strategy_name=generator_name,
         open_direction_by_symbol=open_direction_map,
+        reverse_signal_mode=resolved.strategy_reverse_signal_mode or "open",
     )
     log_pipeline_event(
         "strategy_poll",

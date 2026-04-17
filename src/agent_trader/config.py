@@ -65,6 +65,10 @@ class Settings:
     strategy_generator: str = ""
     # 同方向已有持仓时跳过新信号（防止一路加仓追高）
     strategy_skip_same_direction: bool = True
+    # 反向信号遇到既有持仓时的处理：
+    # "open"       = 允许翻仓（历史行为；直接开反向仓）
+    # "close_only" = 只平仓不反手（更保守：等下一根确认再考虑开新仓）
+    strategy_reverse_signal_mode: str = "open"
     # freqtrade 反向 adapter
     freqtrade_api_url: str = ""
     freqtrade_api_username: str = ""
@@ -73,6 +77,8 @@ class Settings:
     # 告警 webhook（为空则全关）
     alert_webhook_url: str = ""
     alert_timeout_seconds: float = 5.0
+    monitor_snapshot_path: str = "var/state/monitor_snapshot.json"
+    monitor_poll_seconds: int = 60
     # 山寨币筛选观察池
     strategy_alt_screener_enabled: bool = False
     strategy_alt_top_n: int = 10
@@ -170,12 +176,15 @@ def load_settings() -> Settings:
         strategy_higher_tf_slow_ema=_int_env("STRATEGY_HIGHER_TF_SLOW_EMA", 0),
         strategy_generator=os.getenv("STRATEGY_GENERATOR", ""),
         strategy_skip_same_direction=_bool_env("STRATEGY_SKIP_SAME_DIRECTION", True),
+        strategy_reverse_signal_mode=os.getenv("STRATEGY_REVERSE_SIGNAL_MODE", "open"),
         freqtrade_api_url=os.getenv("FREQTRADE_API_URL", ""),
         freqtrade_api_username=os.getenv("FREQTRADE_API_USERNAME", ""),
         freqtrade_api_password=os.getenv("FREQTRADE_API_PASSWORD", ""),
         freqtrade_reconcile_on_block=_bool_env("FREQTRADE_RECONCILE_ON_BLOCK", False),
         alert_webhook_url=os.getenv("ALERT_WEBHOOK_URL", ""),
         alert_timeout_seconds=_float_env("ALERT_TIMEOUT_SECONDS", 5.0),
+        monitor_snapshot_path=os.getenv("MONITOR_SNAPSHOT_PATH", "var/state/monitor_snapshot.json"),
+        monitor_poll_seconds=_int_env("MONITOR_POLL_SECONDS", 60),
         strategy_alt_screener_enabled=_bool_env("STRATEGY_ALT_SCREENER_ENABLED", False),
         strategy_alt_top_n=_int_env("STRATEGY_ALT_TOP_N", 10),
         strategy_alt_min_change_pct=_float_env("STRATEGY_ALT_MIN_CHANGE_PCT", 1.0),

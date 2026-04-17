@@ -22,6 +22,7 @@ def run_strategy_once(
     signal_generator: Optional[Callable[..., Any]] = None,
     strategy_name: str = "ema_atr_inline",
     open_direction_by_symbol: Optional[Dict[str, str]] = None,
+    reverse_signal_mode: str = "open",
 ) -> List[Dict[str, Any]]:
     """For each symbol, fetch candles, run EMA/ATR, dispatch signal if any.
 
@@ -72,6 +73,17 @@ def run_strategy_once(
                     }
                 )
                 continue
+            if (
+                existing
+                and _is_reverse(existing, signal.side)
+                and reverse_signal_mode == "close_only"
+            ):
+                from dataclasses import replace
+                signal = replace(
+                    signal,
+                    position_action="CLOSE",
+                    rationale=f"{signal.rationale}:pullback_close",
+                )
         bar_ts = candles[-1].ts if candles else 0
         request_payload = _signal_to_request_payload(signal, bar=bar, bar_ts=bar_ts)
         try:
@@ -112,7 +124,10 @@ def run_strategy_once(
 
 def _signal_to_request_payload(signal, bar: str, bar_ts: int) -> Dict[str, Any]:
     payload = asdict(signal)
-    payload["client_signal_id"] = f"ema_atr:{signal.symbol}:{bar}:{bar_ts}:{signal.side.lower()}"
+    action = (signal.position_action or "OPEN").lower()
+    payload["client_signal_id"] = (
+        f"ema_atr:{signal.symbol}:{bar}:{bar_ts}:{signal.side.lower()}:{action}"
+    )
     return payload
 
 
@@ -123,5 +138,15 @@ def _same_direction(open_side: str, signal_side: str) -> bool:
     if os == "long" and ss == "buy":
         return True
     if os == "short" and ss == "sell":
+        return True
+    return False
+
+
+def _is_reverse(open_side: str, signal_side: str) -> bool:
+    os = (open_side or "").lower()
+    ss = (signal_side or "").lower()
+    if os == "long" and ss == "sell":
+        return True
+    if os == "short" and ss == "buy":
         return True
     return False
