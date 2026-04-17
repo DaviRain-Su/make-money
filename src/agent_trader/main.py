@@ -16,6 +16,8 @@ from agent_trader.proposal_service import build_trade_proposal
 from agent_trader.reconcile_job import reconcile_open_orders_job
 from agent_trader.risk import evaluate_trade
 from agent_trader.signal_security import ensure_signal_not_duplicate, verify_signal_auth
+from agent_trader.strategy import EmaAtrConfig
+from agent_trader.strategy_runner import run_strategy_once
 from agent_trader.web_ui import read_recent_audit_events, summarize_events
 from agent_trader.control_state import halt_trading, read_control_state, resume_trading
 
@@ -530,6 +532,65 @@ def ui_resume_action(
     return {"trading_halted": False}
 
 
+def resolve_strategy_symbols(current_settings: Optional[Settings] = None) -> tuple:
+    resolved = current_settings or get_settings()
+    if resolved.strategy_symbols:
+        return resolved.strategy_symbols
+    if resolved.okx_allowed_symbols:
+        return resolved.okx_allowed_symbols
+    return (resolved.okx_symbol,)
+
+
+def build_strategy_config(current_settings: Optional[Settings] = None) -> EmaAtrConfig:
+    resolved = current_settings or get_settings()
+    return EmaAtrConfig(
+        fast_ema=resolved.strategy_fast_ema,
+        slow_ema=resolved.strategy_slow_ema,
+        atr_period=resolved.strategy_atr_period,
+        atr_stop_mult=resolved.strategy_atr_stop_mult,
+        atr_tp_mult=resolved.strategy_atr_tp_mult,
+        leverage=resolved.strategy_leverage,
+        confidence=resolved.strategy_confidence,
+        expected_slippage_bps=resolved.strategy_expected_slippage_bps,
+    )
+
+
+def run_strategy_poll(
+    client: Optional[OKXClient] = None,
+    current_settings: Optional[Settings] = None,
+    dispatch: Optional[Any] = None,
+) -> Dict[str, Any]:
+    resolved = current_settings or get_settings()
+    if not resolved.strategy_enabled:
+        return {"status": "disabled", "results": []}
+    active_client = client or make_okx_client(resolved)
+
+    def default_dispatch(payload: Dict[str, Any]) -> Dict[str, Any]:
+        return process_signal_request_payload(
+            payload,
+            current_settings=resolved,
+            auth_header=resolved.signal_shared_secret or None,
+        )
+
+    effective_dispatch = dispatch or default_dispatch
+    symbols = resolve_strategy_symbols(resolved)
+    strategy_config = build_strategy_config(resolved)
+    results = run_strategy_once(
+        client=active_client,
+        symbols=symbols,
+        bar=resolved.strategy_bar,
+        candle_limit=resolved.strategy_candle_limit,
+        strategy_config=strategy_config,
+        dispatch=effective_dispatch,
+    )
+    log_pipeline_event(
+        "strategy_poll",
+        {"symbols": list(symbols), "bar": resolved.strategy_bar, "count": len(results)},
+        current_settings=resolved,
+    )
+    return {"status": "ok", "symbols": list(symbols), "bar": resolved.strategy_bar, "results": results}
+
+
 def run_demo_validation_workflow(
     payload: Dict[str, Any],
     client: Optional[Any] = None,
@@ -770,6 +831,20 @@ try:
             raise HTTPException(status_code=403, detail="local only")
         actor = str(payload.get("actor", "local-ui"))
         return ui_resume_action(actor=actor, current_settings=get_settings())
+
+    @app.post("/admin/strategy/poll")
+    def admin_strategy_poll(
+        payload: Dict[str, Any],
+        x_admin_timestamp: Optional[str] = Header(default=None),
+        x_admin_nonce: Optional[str] = Header(default=None),
+        x_admin_signature: Optional[str] = Header(default=None),
+    ) -> Dict[str, Any]:
+        ts, nonce, sig = _admin_headers(x_admin_timestamp, x_admin_nonce, x_admin_signature)
+        try:
+            admin_api._authorize(get_settings(), "/admin/strategy/poll", ts, nonce, sig, body=payload)
+        except Exception as exc:
+            raise _admin_errors(exc) from exc
+        return run_strategy_poll(current_settings=get_settings())
 
     @app.post("/admin/manual_trade")
     def admin_manual_trade(

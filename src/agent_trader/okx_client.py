@@ -118,6 +118,10 @@ class OKXClient:
             raise ValueError(f"No ticker data returned for {inst_id}")
         return float(data[0]["last"])
 
+    def get_candles(self, inst_id: str, bar: str = "1H", limit: str = "200") -> Any:
+        """Raw OKX candlestick response. Order is newest-first per OKX spec."""
+        return self.market_api.get_candlesticks(instId=inst_id, bar=bar, limit=limit)
+
     def _resolve_pos_side(self, side: str, pos_side: str = "") -> str:
         if pos_side:
             return pos_side

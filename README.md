@@ -88,6 +88,39 @@
 - `RISK_MAX_OPEN_POSITIONS`：最多同时持有多少个不同合约。到上限后只能加仓既有合约或平仓，不能再开新合约
 - Dashboard 的"按合约敞口"卡片现在同时展示方向、markPx、liqPx 和距离（小于 5% 红色，小于 15% 黄色，其余绿色）
 
+## 策略信号源（EMA/ATR）
+
+`src/agent_trader/strategy.py` + `strategy_runner.py` 实现了一个可单测的确定性策略：
+
+- 双 EMA 交叉判方向（`STRATEGY_FAST_EMA` / `STRATEGY_SLOW_EMA`）
+- ATR 定止损止盈（默认 2×ATR 止损，3×ATR 止盈，3R 盈亏比）
+- **只看收线完的 K 线**（OKX `confirm="1"`），不会在形成中的 bar 上闪烁
+- 幂等键：`client_signal_id = "ema_atr:SYMBOL:bar:bar_ts:side"`，同一根 K 线、同一方向只会发一次
+
+调用链：
+```
+strategy_runner.run_strategy_once(client, symbols, bar, limit, config, dispatch)
+   ↓ 每个 symbol
+     client.get_candles()  (OKX)
+     parse_okx_candles() → oldest-first, 过滤未收线
+     generate_ema_atr_signal() → Optional[StrategySignal]
+   ↓ 有信号就 dispatch（默认调 process_signal_request_payload）
+     → /signal 管线 → 风控 → 执行或拦截
+```
+
+入口：
+- Python：`from agent_trader.main import run_strategy_poll; run_strategy_poll()` 做一次轮询
+- HTTP：`POST /admin/strategy/poll`（走 admin HMAC 鉴权），Hermes 可以按需触发
+- 长运行：可以和 `runtime_daemon` 串起来做周期调度，目前 repo 暂未默认挂上
+
+多合约：默认用 `STRATEGY_SYMBOLS`，空则回落到 `OKX_ALLOWED_SYMBOLS`，再空则只处理 `OKX_SYMBOL`。
+
+安全默认：`STRATEGY_ENABLED=false`。开启前建议：
+1. paper 模式 + demo 账户
+2. 对每个合约把 K 线拉下来，手动复核 EMA 交叉点是否和预期一致
+3. 观察 `strategy_poll` 审计事件 + 被风控拦下的信号，确认策略不会和风控打架
+4. 再把 `EXECUTION_ENABLED=true`
+
 ## Hermes 管理面
 
 Hermes 跑在独立进程（不在这个 repo 里）。它只能通过 HMAC 签名的 HTTP 调用这里的服务，**既不持有 OKX 密钥，也改不了 `risk.py`**。

@@ -43,6 +43,20 @@ class Settings:
     admin_large_trade_usd: float
     risk_limits: RiskLimits
     okx_allowed_symbols: Tuple[str, ...] = ()
+    # 策略信号源（EMA/ATR）相关
+    strategy_enabled: bool = False
+    strategy_symbols: Tuple[str, ...] = ()          # 空 = 用 okx_allowed_symbols，再空 = [okx_symbol]
+    strategy_bar: str = "1H"
+    strategy_candle_limit: int = 200
+    strategy_poll_seconds: int = 300
+    strategy_fast_ema: int = 20
+    strategy_slow_ema: int = 50
+    strategy_atr_period: int = 14
+    strategy_atr_stop_mult: float = 2.0
+    strategy_atr_tp_mult: float = 3.0
+    strategy_leverage: float = 2.0
+    strategy_confidence: float = 0.6
+    strategy_expected_slippage_bps: float = 8.0
 
 
 
@@ -117,4 +131,17 @@ def load_settings() -> Settings:
             min_liquidation_distance_pct=_float_env("RISK_MIN_LIQUIDATION_DISTANCE_PCT", 0.0),
             max_open_positions=_int_env("RISK_MAX_OPEN_POSITIONS", 0),
         ),
+        strategy_enabled=_bool_env("STRATEGY_ENABLED", False),
+        strategy_symbols=_tuple_env("STRATEGY_SYMBOLS"),
+        strategy_bar=os.getenv("STRATEGY_BAR", "1H"),
+        strategy_candle_limit=_int_env("STRATEGY_CANDLE_LIMIT", 200),
+        strategy_poll_seconds=_int_env("STRATEGY_POLL_SECONDS", 300),
+        strategy_fast_ema=_int_env("STRATEGY_FAST_EMA", 20),
+        strategy_slow_ema=_int_env("STRATEGY_SLOW_EMA", 50),
+        strategy_atr_period=_int_env("STRATEGY_ATR_PERIOD", 14),
+        strategy_atr_stop_mult=_float_env("STRATEGY_ATR_STOP_MULT", 2.0),
+        strategy_atr_tp_mult=_float_env("STRATEGY_ATR_TP_MULT", 3.0),
+        strategy_leverage=_float_env("STRATEGY_LEVERAGE", 2.0),
+        strategy_confidence=_float_env("STRATEGY_CONFIDENCE", 0.6),
+        strategy_expected_slippage_bps=_float_env("STRATEGY_EXPECTED_SLIPPAGE_BPS", 8.0),
     )
