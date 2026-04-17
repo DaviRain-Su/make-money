@@ -6,6 +6,7 @@ from agent_trader.strategy import (
     generate_ema_atr_signal,
     parse_okx_candles,
 )
+from agent_trader.signal_registry import resolve as resolve_signal_generator
 
 
 
@@ -18,6 +19,8 @@ def run_strategy_once(
     dispatch: Callable[[Dict[str, Any]], Dict[str, Any]],
     higher_tf_bar: Optional[str] = None,
     higher_tf_candle_limit: Optional[int] = None,
+    signal_generator: Optional[Callable[..., Any]] = None,
+    strategy_name: str = "ema_atr_inline",
 ) -> List[Dict[str, Any]]:
     """For each symbol, fetch candles, run EMA/ATR, dispatch signal if any.
 
@@ -49,7 +52,10 @@ def run_strategy_once(
             except Exception as exc:  # noqa: BLE001
                 results.append({"symbol": symbol, "status": "fetch_error", "error": f"higher_tf: {type(exc).__name__}: {exc}"})
                 continue
-        signal = generate_ema_atr_signal(symbol, candles, strategy_config, higher_tf_candles=higher_tf_candles)
+        if signal_generator is not None:
+            signal = signal_generator(symbol, candles, higher_tf_candles)
+        else:
+            signal = generate_ema_atr_signal(symbol, candles, strategy_config, higher_tf_candles=higher_tf_candles)
         if signal is None:
             results.append({"symbol": symbol, "status": "no_signal", "bars": len(candles)})
             continue

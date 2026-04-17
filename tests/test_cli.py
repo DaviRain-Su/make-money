@@ -19,6 +19,16 @@ class CLITests(unittest.TestCase):
         parsed = json.loads(buf.getvalue())
         self.assertEqual(parsed["status"], "ok")
 
+    def test_screen_alts_command_prints_json_candidates(self):
+        with patch("agent_trader.cli.run_alt_screener", return_value={"status": "ok", "symbols": ["ALT1-USDT-SWAP"], "results": [{"instId": "ALT1-USDT-SWAP"}] } ):
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                exit_code = main(["screen-alts"])
+
+        self.assertEqual(exit_code, 0)
+        parsed = json.loads(buf.getvalue())
+        self.assertEqual(parsed["symbols"], ["ALT1-USDT-SWAP"])
+
     def test_main_uses_sys_argv_when_no_argv_is_provided(self):
         fake_daemon = type("FakeDaemon", (), {"run_once": lambda self, send_ping=False: None, "last_error": None})()
         with patch.object(sys, "argv", ["cli.py", "runtime-once"]), patch("agent_trader.cli.build_runtime_daemon", return_value=fake_daemon):

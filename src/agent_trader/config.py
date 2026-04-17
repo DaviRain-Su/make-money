@@ -60,6 +60,9 @@ class Settings:
     # 多时间周期共振过滤；higher_tf_slow_ema=0 关闭
     strategy_higher_tf_bar: str = ""
     strategy_higher_tf_slow_ema: int = 0
+    # 信号生成器名字（对应 signal_registry 里注册的 key）；
+    # 空 = 用默认的内置 ema_atr 参数路径
+    strategy_generator: str = ""
     # freqtrade 反向 adapter
     freqtrade_api_url: str = ""
     freqtrade_api_username: str = ""
@@ -163,6 +166,7 @@ def load_settings() -> Settings:
         strategy_expected_slippage_bps=_float_env("STRATEGY_EXPECTED_SLIPPAGE_BPS", 8.0),
         strategy_higher_tf_bar=os.getenv("STRATEGY_HIGHER_TF_BAR", ""),
         strategy_higher_tf_slow_ema=_int_env("STRATEGY_HIGHER_TF_SLOW_EMA", 0),
+        strategy_generator=os.getenv("STRATEGY_GENERATOR", ""),
         freqtrade_api_url=os.getenv("FREQTRADE_API_URL", ""),
         freqtrade_api_username=os.getenv("FREQTRADE_API_USERNAME", ""),
         freqtrade_api_password=os.getenv("FREQTRADE_API_PASSWORD", ""),

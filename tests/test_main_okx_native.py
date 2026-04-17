@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from agent_trader.config import Settings
-from agent_trader.main import healthcheck_payload, make_okx_client, okx_account_state_payload, process_signal_request_payload, run_okx_native_signal_pipeline
+from agent_trader.main import healthcheck_payload, make_okx_client, okx_account_state_payload, process_signal_request_payload, resolve_strategy_symbols, run_okx_native_signal_pipeline
 from agent_trader.models import AccountState, RiskLimits, StrategySignal
 from agent_trader.okx_client import OKXCredentials
 
@@ -139,6 +139,15 @@ class MainOKXNativeTests(unittest.TestCase):
         payload = healthcheck_payload(self.settings)
         self.assertEqual(payload["execution_path"], "okx_native")
         self.assertEqual(payload["connector"], "okx_native")
+
+    def test_resolve_strategy_symbols_appends_screened_alts(self):
+        screened = [{"instId": "ALT1-USDT-SWAP"}, {"instId": "ALT2-USDT-SWAP"}]
+        tuned = Settings(**{**self.settings.__dict__, "strategy_alt_screener_enabled": True, "strategy_alt_top_n": 2})
+        with patch("agent_trader.main.screen_okx_alt_swaps", return_value=screened) as mocked_screen:
+            symbols = resolve_strategy_symbols(current_settings=tuned, client=object())
+
+        self.assertEqual(symbols, ("BTC-USDT-SWAP", "ALT1-USDT-SWAP", "ALT2-USDT-SWAP"))
+        mocked_screen.assert_called_once()
 
     def tearDown(self):
         self.tempdir.cleanup()

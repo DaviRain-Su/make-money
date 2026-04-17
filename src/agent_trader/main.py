@@ -684,6 +684,12 @@ def run_strategy_poll(
     effective_dispatch = dispatch or default_dispatch
     symbols = resolve_strategy_symbols(resolved, client=active_client)
     strategy_config = build_strategy_config(resolved)
+    selected_generator = None
+    generator_name = "ema_atr_inline"
+    if resolved.strategy_generator:
+        from agent_trader.signal_registry import resolve as _resolve_gen
+        selected_generator = _resolve_gen(resolved.strategy_generator)
+        generator_name = resolved.strategy_generator
     results = run_strategy_once(
         client=active_client,
         symbols=symbols,
@@ -692,6 +698,8 @@ def run_strategy_poll(
         strategy_config=strategy_config,
         dispatch=effective_dispatch,
         higher_tf_bar=resolved.strategy_higher_tf_bar or None,
+        signal_generator=selected_generator,
+        strategy_name=generator_name,
     )
     log_pipeline_event(
         "strategy_poll",

@@ -122,6 +122,14 @@ class OKXClient:
         """Raw OKX candlestick response. Order is newest-first per OKX spec."""
         return self.market_api.get_candlesticks(instId=inst_id, bar=bar, limit=limit)
 
+    def get_tickers(self, inst_type: str = "SWAP") -> Any:
+        return self.market_api.get_tickers(instType=inst_type)
+
+    def get_instruments(self, inst_type: str = "SWAP") -> Any:
+        if self.public_api is None:
+            raise RuntimeError("OKX public API client is not configured")
+        return self.public_api.get_instruments(instType=inst_type)
+
     def get_history_candles(
         self,
         inst_id: str,

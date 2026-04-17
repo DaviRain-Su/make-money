@@ -5,6 +5,7 @@ import sys
 from typing import List, Optional
 
 from agent_trader.config import load_settings
+from agent_trader.alt_screener import run_alt_screener
 from agent_trader.demo_smoke import run_demo_smoke_test
 from agent_trader.healthcheck import run_local_healthcheck
 from agent_trader.runtime_entry import build_runtime_daemon
@@ -21,7 +22,7 @@ def _run_maybe_async(value):
 def main(argv: Optional[List[str]] = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if not args:
-        print("usage: cli.py [runtime-once|health-check|demo-smoke <json-payload>]")
+        print("usage: cli.py [runtime-once|health-check|screen-alts|demo-smoke <json-payload>]")
         return 2
 
     command = args[0]
@@ -40,6 +41,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         result = run_local_healthcheck(current_settings=settings)
         print(json.dumps(result, ensure_ascii=False))
         return 0 if result.get("status") == "ok" else 1
+
+    if command == "screen-alts":
+        result = run_alt_screener(current_settings=settings)
+        print(json.dumps(result, ensure_ascii=False))
+        return 0
 
     if command == "demo-smoke":
         if len(args) < 2:

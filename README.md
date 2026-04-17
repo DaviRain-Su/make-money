@@ -115,6 +115,12 @@ strategy_runner.run_strategy_once(client, symbols, bar, limit, config, dispatch)
 
 多合约：默认用 `STRATEGY_SYMBOLS`，空则回落到 `OKX_ALLOWED_SYMBOLS`，再空则只处理 `OKX_SYMBOL`。
 
+**多时间周期共振过滤**（可选）：设 `STRATEGY_HIGHER_TF_BAR=4H` + `STRATEGY_HIGHER_TF_SLOW_EMA=50`，1H 交叉时会额外检查 4H slow EMA 的斜率是否和方向一致。震荡行情里的假突破能砍掉一大半。拿不到高周期数据时 fail-closed（不发信号）。
+
+**可插拔信号生成器**：`signal_registry.register(name, fn)` 注册自定义策略，`STRATEGY_GENERATOR=name` 切换。函数签名 `(symbol, primary_candles, higher_tf_candles=None) -> Optional[StrategySignal]`。内置 `ema_atr` 在模块加载时自动注册。这是预留给未来 ML 策略 / 规则库 / 外部服务接入的口子，不引入任何硬依赖。
+
+**周期性自动运行**：`build_strategy_scheduler(settings)` 返回一个 `StrategyScheduler`，`await scheduler.run_forever(should_continue)` 就会按 `STRATEGY_POLL_SECONDS` 自动循环。单次 runner 报错不会打挂循环，信号仍走 `/signal` 管线（风控 + 幂等 + 审计）。
+
 安全默认：`STRATEGY_ENABLED=false`。开启前建议：
 1. paper 模式 + demo 账户
 2. 对每个合约把 K 线拉下来，手动复核 EMA 交叉点是否和预期一致
