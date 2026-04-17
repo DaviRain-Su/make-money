@@ -845,6 +845,40 @@ refresh();setInterval(refresh,3000)
 </body>
 </html>"""
 
+MONITOR_UI_HTML = """<!doctype html>
+<html lang=\"en\">
+<head>
+<meta charset=\"utf-8\" />
+<title>agent_trader monitor</title>
+<style>
+body{font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;margin:0;padding:16px;background:#0b0d10;color:#e6e7ea}
+h1{font-size:18px;margin:0 0 12px}
+.card{background:#14181d;border:1px solid #232a33;border-radius:8px;padding:12px;margin-bottom:12px}
+.kv{display:grid;grid-template-columns:max-content 1fr;gap:4px 12px;font-size:13px}
+.kv div:nth-child(odd){color:#8b95a2}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th,td{padding:6px 8px;border-bottom:1px solid #232a33;text-align:left;vertical-align:top}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;border:1px solid #39434f;background:#222a33}
+.badge.ok{color:#7ddc8b;border-color:#2f6b3b}.badge.warn{color:#f0c674;border-color:#6b5a2f}.badge.err{color:#ff9292;border-color:#6b2f2f}
+code{color:#9cdcfe}
+</style>
+</head>
+<body>
+<h1>agent_trader — background monitor</h1>
+<div class=\"card\"><div class=\"kv\" id=\"meta\"></div></div>
+<div class=\"card\"><h3 style=\"margin-top:0\">监控状态</h3><div class=\"kv\" id=\"monitor\"></div></div>
+<div class=\"card\"><h3 style=\"margin-top:0\">健康检查</h3><div class=\"kv\" id=\"health\"></div></div>
+<div class=\"card\"><h3 style=\"margin-top:0\">山寨候选池</h3><table><thead><tr><th>symbol</th><th>category</th><th>score</th><th>chg24h</th><th>dist high</th><th>spread</th><th>risk</th></tr></thead><tbody id=\"alts\"></tbody></table></div>
+<script>
+async function getJson(path){const r=await fetch(path);if(!r.ok)throw new Error(await r.text());return r.json()}
+function kv(el,map){el.innerHTML='';for(const k of Object.keys(map)){const a=document.createElement('div');a.textContent=k;const b=document.createElement('div');b.textContent=map[k]??'';el.appendChild(a);el.appendChild(b)}}
+function badge(txt,cls){return '<span class="badge '+cls+'">'+txt+'</span>'}
+async function refresh(){try{const p=await getJson('/ui/monitor-summary');kv(document.getElementById('meta'),{environment:p.settings.environment,okx_symbol:p.settings.okx_symbol,monitor_poll_seconds:p.settings.monitor_poll_seconds,monitor_snapshot_path:p.settings.monitor_snapshot_path});const snap=p.snapshot||{};const monitorStatus=snap.status==='ok'?badge('ok','ok'):snap.status==='degraded'?badge('degraded','warn'):badge(String(snap.status||'empty'),'err');kv(document.getElementById('monitor'),{status:monitorStatus,updated_at:snap.updated_at||'—',screener_count:(snap.screener||{}).count??0,top_symbols:((snap.screener||{}).symbols||[]).slice(0,5).join(', ')||'—'});const health=snap.health||{};kv(document.getElementById('health'),{health_status:health.status||'—',runtime_status:(health.runtime||{}).status||'—',equity_usd:((health.account||{}).equity_usd??'—'),current_exposure_usd:((health.account||{}).current_exposure_usd??'—')});const rows=((snap.screener||{}).results||[]).map(r=>'<tr><td><code>'+r.instId+'</code></td><td>'+r.category+'</td><td>'+r.score+'</td><td>'+r.change_pct_24h+'%</td><td>'+r.distance_from_high_pct+'%</td><td>'+r.spread_bps+' bps</td><td>'+(r.risk_flags&&r.risk_flags.length?r.risk_flags.join(', '):'—')+'</td></tr>').join('');document.getElementById('alts').innerHTML=rows||'<tr><td colspan="7" style="color:#8b95a2">暂无候选数据。先运行 monitor-once 或 monitor-loop。</td></tr>';}catch(e){kv(document.getElementById('monitor'),{error:e.message})}}
+refresh();setInterval(refresh,3000)
+</script>
+</body>
+</html>"""
+
 
 def _is_local_request(request) -> bool:
     host = getattr(getattr(request, "client", None), "host", None)
@@ -967,6 +1001,25 @@ try:
         if not _is_local_request(request):
             raise HTTPException(status_code=403, detail="local only")
         return build_ui_summary_payload(current_settings=get_settings(), account_fn=_ui_account_fn)
+
+    @app.get("/ui/monitor", response_class=HTMLResponse)
+    def ui_monitor(request: Request) -> HTMLResponse:
+        if not _is_local_request(request):
+            raise HTTPException(status_code=403, detail="local only")
+        return HTMLResponse(content=MONITOR_UI_HTML)
+
+    @app.get("/ui/monitor-summary")
+    def ui_monitor_summary(request: Request) -> Dict[str, Any]:
+        if not _is_local_request(request):
+            raise HTTPException(status_code=403, detail="local only")
+        from agent_trader.monitor_service import build_monitor_dashboard_payload
+        resolved = get_settings()
+        payload = build_monitor_dashboard_payload(current_settings=resolved)
+        payload["settings"].update({
+            "environment": resolved.environment,
+            "okx_symbol": resolved.okx_symbol,
+        })
+        return payload
 
     @app.get("/ui/events")
     def ui_events(request: Request, limit: int = 100) -> Dict[str, Any]:
