@@ -162,7 +162,7 @@ def okx_account_state_payload(
         inst_id=resolved.okx_symbol,
         ccy="USDT",
         daily_pnl_pct=None,
-        symbol_scoped=True,
+        symbol_scoped=False,
     )
     payload = asdict(account_state)
     payload["account_name"] = resolved.hbot_account_name
@@ -184,16 +184,17 @@ def process_signal_payload(
     risk_fraction: float,
     execution_enabled: bool,
     paper_mode: bool,
+    allowed_symbols: Optional[Any] = None,
 ) -> Dict[str, Any]:
     proposal = build_trade_proposal(
         signal=signal,
         account=account,
         connector=connector,
-        symbol=symbol,
+        symbol=signal.symbol or symbol,
         risk_limits=risk_limits,
         risk_fraction=risk_fraction,
     )
-    decision = evaluate_trade(proposal, account, risk_limits)
+    decision = evaluate_trade(proposal, account, risk_limits, allowed_symbols=allowed_symbols)
     risk_payload = {
         "approved": decision.approved,
         "reasons": decision.reasons,
@@ -293,16 +294,17 @@ def process_okx_signal_payload(
     risk_fraction: float,
     execution_enabled: bool,
     paper_mode: bool,
+    allowed_symbols: Optional[Any] = None,
 ) -> Dict[str, Any]:
     proposal = build_trade_proposal(
         signal=signal,
         account=account,
         connector="okx_native",
-        symbol=symbol,
+        symbol=signal.symbol or symbol,
         risk_limits=risk_limits,
         risk_fraction=risk_fraction,
     )
-    decision = evaluate_trade(proposal, account, risk_limits)
+    decision = evaluate_trade(proposal, account, risk_limits, allowed_symbols=allowed_symbols)
     risk_payload = {
         "approved": decision.approved,
         "reasons": decision.reasons,
@@ -357,6 +359,7 @@ def run_signal_pipeline(
         risk_fraction=resolved.proposal_risk_fraction,
         execution_enabled=resolved.execution_enabled,
         paper_mode=resolved.paper_mode,
+        allowed_symbols=resolved.okx_allowed_symbols or None,
     )
 
 
@@ -373,7 +376,7 @@ def run_okx_native_signal_pipeline(
         inst_id=resolved.okx_symbol,
         ccy="USDT",
         daily_pnl_pct=None,
-        symbol_scoped=True,
+        symbol_scoped=False,
     )
     return process_okx_signal_payload(
         signal=signal,
@@ -384,6 +387,7 @@ def run_okx_native_signal_pipeline(
         risk_fraction=resolved.proposal_risk_fraction,
         execution_enabled=resolved.execution_enabled,
         paper_mode=resolved.paper_mode,
+        allowed_symbols=resolved.okx_allowed_symbols or None,
     )
 
 
@@ -421,6 +425,7 @@ def process_signal_request_payload(
         rationale=payload.get("rationale", ""),
         position_action=payload.get("position_action", "OPEN"),
         pos_side=payload.get("pos_side", ""),
+        symbol=payload.get("symbol") or None,
     )
     result = run_primary_signal_pipeline(signal=signal, client=client, current_settings=resolved_settings)
     emit_signal_audit_events(
@@ -606,17 +611,24 @@ pre{margin:0;white-space:pre-wrap;word-break:break-word;font-size:11px;color:#8b
     <div class=\"kv\" style=\"margin-top:12px\" id=\"meta-kv\"></div>
   </div>
   <div class=\"card\">
-    <h3 style=\"margin-top:0\">Account</h3>
+    <h3 style=\"margin-top:0\">账户</h3>
     <div class=\"kv\" id=\"account-kv\"></div>
     <pre id=\"account-error\"></pre>
   </div>
   <div class=\"card\">
-    <h3 style=\"margin-top:0\">Counters (last 100 events)</h3>
+    <h3 style=\"margin-top:0\">计数器（最近 100 条事件）</h3>
     <div class=\"kv\" id=\"counter-kv\"></div>
   </div>
 </div>
 <div class=\"card\">
-  <h3 style=\"margin-top:0\">Audit events</h3>
+  <h3 style=\"margin-top:0\">按合约敞口</h3>
+  <table>
+    <thead><tr><th>合约</th><th>名义金额 (USD)</th></tr></thead>
+    <tbody id=\"positions-body\"><tr><td colspan=\"2\" style=\"color:#8b95a2\">暂无持仓</td></tr></tbody>
+  </table>
+</div>
+<div class=\"card\">
+  <h3 style=\"margin-top:0\">审计事件</h3>
   <table>
     <thead><tr><th>time</th><th>kind</th><th>event</th><th>symbol</th><th>detail</th></tr></thead>
     <tbody id=\"events-body\"></tbody>
@@ -627,7 +639,7 @@ async function post(path,body){const r=await fetch(path,{method:'POST',headers:{
 async function getJson(path){const r=await fetch(path);if(!r.ok)throw new Error(r.statusText);return r.json()}
 function kv(el,map){el.innerHTML='';for(const k of Object.keys(map)){const a=document.createElement('div');a.textContent=k;const b=document.createElement('div');b.textContent=map[k]??'';el.appendChild(a);el.appendChild(b)}}
 function classify(e){const t=e.event_type||'';if(t==='admin_action')return'admin';if(t==='risk_decision')return e.risk_approved===false?'danger':'ok';if(t==='order_submitted')return e.execution_status==='blocked'?'danger':(e.execution_status==='submitted'?'ok':'info');if(t==='order_reconciled')return e.reconciliation_status==='filled'?'ok':'info';return'info'}
-async function refresh(){try{const s=await getJson('/ui/summary');const sl=document.getElementById('status-line');if(s.trading_halted){sl.innerHTML='<span class=\"status-halted\">HALTED</span> — '+(s.halt_reason||'')+' by '+(s.halted_by||'');document.getElementById('halt-btn').style.display='none';document.getElementById('resume-btn').style.display='inline-block'}else{sl.innerHTML='<span class=\"status-live\">LIVE</span>';document.getElementById('halt-btn').style.display='inline-block';document.getElementById('resume-btn').style.display='none'}kv(document.getElementById('meta-kv'),{environment:s.environment,symbol:s.symbol,path:s.execution_path,execution_enabled:s.execution_enabled,paper_mode:s.paper_mode,okx_flag:s.okx_flag});kv(document.getElementById('counter-kv'),s.counters||{});if(s.account){kv(document.getElementById('account-kv'),{equity_usd:s.account.equity_usd,daily_pnl_pct:s.account.daily_pnl_pct,exposure_usd:s.account.current_exposure_usd,open_positions:s.account.open_positions,connector:s.account.connector,symbol:s.account.symbol})}else{document.getElementById('account-kv').innerHTML=''}document.getElementById('account-error').textContent=s.account_error||'';const body=document.getElementById('events-body');body.innerHTML='';(s.events||[]).slice().reverse().forEach(e=>{const tr=document.createElement('tr');const cls=classify(e);const ts=(e.timestamp||'').replace('T',' ').slice(0,19);const detail=e.reasons?e.reasons.join(', '):(e.reason||e.action||e.execution_status||e.reconciliation_status||'');tr.innerHTML=`<td>${ts}</td><td><span class=\"badge ${cls}\">${cls}</span></td><td>${e.event_type||''}</td><td>${e.symbol||''}</td><td>${detail}</td>`;body.appendChild(tr)})}catch(e){console.error(e)}}
+async function refresh(){try{const s=await getJson('/ui/summary');const sl=document.getElementById('status-line');if(s.trading_halted){sl.innerHTML='<span class=\"status-halted\">HALTED</span> — '+(s.halt_reason||'')+' by '+(s.halted_by||'');document.getElementById('halt-btn').style.display='none';document.getElementById('resume-btn').style.display='inline-block'}else{sl.innerHTML='<span class=\"status-live\">LIVE</span>';document.getElementById('halt-btn').style.display='inline-block';document.getElementById('resume-btn').style.display='none'}kv(document.getElementById('meta-kv'),{environment:s.environment,symbol:s.symbol,path:s.execution_path,execution_enabled:s.execution_enabled,paper_mode:s.paper_mode,okx_flag:s.okx_flag});kv(document.getElementById('counter-kv'),s.counters||{});if(s.account){kv(document.getElementById('account-kv'),{equity_usd:s.account.equity_usd,avail_equity_usd:s.account.available_equity_usd??'—',margin_ratio:s.account.margin_ratio??'—',used_margin_usd:s.account.used_margin_usd??'—',daily_pnl_pct:s.account.daily_pnl_pct,exposure_usd:s.account.current_exposure_usd,open_positions:s.account.open_positions,connector:s.account.connector,symbol:s.account.symbol});const pb=document.getElementById('positions-body');pb.innerHTML='';const bySym=s.account.positions_by_symbol||{};const entries=Object.entries(bySym).sort((a,b)=>b[1]-a[1]);if(entries.length===0){pb.innerHTML='<tr><td colspan=\"2\" style=\"color:#8b95a2\">暂无持仓</td></tr>'}else{entries.forEach(([sym,val])=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${sym}</td><td>${Number(val).toFixed(2)}</td>`;pb.appendChild(tr)})}}else{document.getElementById('account-kv').innerHTML='';document.getElementById('positions-body').innerHTML='<tr><td colspan=\"2\" style=\"color:#8b95a2\">暂无持仓</td></tr>'}document.getElementById('account-error').textContent=s.account_error||'';const body=document.getElementById('events-body');body.innerHTML='';(s.events||[]).slice().reverse().forEach(e=>{const tr=document.createElement('tr');const cls=classify(e);const ts=(e.timestamp||'').replace('T',' ').slice(0,19);const detail=e.reasons?e.reasons.join(', '):(e.reason||e.action||e.execution_status||e.reconciliation_status||'');tr.innerHTML=`<td>${ts}</td><td><span class=\"badge ${cls}\">${cls}</span></td><td>${e.event_type||''}</td><td>${e.symbol||''}</td><td>${detail}</td>`;body.appendChild(tr)})}catch(e){console.error(e)}}
 document.getElementById('halt-btn').addEventListener('click',async()=>{const reason=prompt('halt reason?','manual');if(reason===null)return;try{await post('/ui/halt',{reason,actor:'local-ui'});refresh()}catch(e){alert('halt failed: '+e.message)}})
 document.getElementById('resume-btn').addEventListener('click',async()=>{if(!confirm('Resume trading?'))return;try{await post('/ui/resume',{actor:'local-ui'});refresh()}catch(e){alert('resume failed: '+e.message)}})
 refresh();setInterval(refresh,3000)

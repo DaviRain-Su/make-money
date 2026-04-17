@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 
 @dataclass(frozen=True)
@@ -16,6 +16,8 @@ class RiskLimits:
     max_margin_utilization: float = 1.0
     # 可用保证金低于该值拒单；0 = 关闭此检查。
     min_available_equity_usd: float = 0.0
+    # 单合约名义金额上限（该合约已有敞口 + 新仓 notional）；0 = 关闭此检查。
+    max_notional_per_symbol_usd: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -30,6 +32,8 @@ class AccountState:
     margin_ratio: Optional[float] = None
     # 已用初始保证金（OKX imr）。None 表示未知。
     used_margin_usd: Optional[float] = None
+    # 按合约展开的敞口（instId → |notional_usd|）。None 表示未知（会跳过单合约风控）。
+    positions_by_symbol: Optional[Dict[str, float]] = None
 
 
 @dataclass(frozen=True)
@@ -66,3 +70,5 @@ class StrategySignal:
     rationale: str
     position_action: str = "OPEN"
     pos_side: str = ""
+    # 可选的合约符号；payload 没传则由 main 层退化到 settings.okx_symbol。
+    symbol: Optional[str] = None

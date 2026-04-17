@@ -1,7 +1,16 @@
 from dataclasses import dataclass
+from typing import Tuple
 import os
 
 from agent_trader.models import RiskLimits
+
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover
+    load_dotenv = None
+
+if load_dotenv is not None:
+    load_dotenv()
 
 
 @dataclass(frozen=True)
@@ -33,6 +42,7 @@ class Settings:
     admin_small_trade_usd: float
     admin_large_trade_usd: float
     risk_limits: RiskLimits
+    okx_allowed_symbols: Tuple[str, ...] = ()
 
 
 
@@ -56,11 +66,20 @@ def _bool_env(name: str, default: bool) -> bool:
 
 
 
+def _tuple_env(name: str) -> Tuple[str, ...]:
+    value = os.getenv(name)
+    if not value:
+        return ()
+    return tuple(token.strip() for token in value.split(",") if token.strip())
+
+
+
 def load_settings() -> Settings:
     return Settings(
         environment=os.getenv("APP_ENV", "dev"),
         okx_connector_id=os.getenv("OKX_CONNECTOR_ID", "okx_perpetual"),
         okx_symbol=os.getenv("OKX_SYMBOL", "BTC-USDT-SWAP"),
+        okx_allowed_symbols=_tuple_env("OKX_ALLOWED_SYMBOLS"),
         okx_api_key=os.getenv("OKX_API_KEY", ""),
         okx_api_secret=os.getenv("OKX_API_SECRET", ""),
         okx_passphrase=os.getenv("OKX_PASSPHRASE", ""),
@@ -94,5 +113,6 @@ def load_settings() -> Settings:
             min_margin_ratio=_float_env("RISK_MIN_MARGIN_RATIO", 0.0),
             max_margin_utilization=_float_env("RISK_MAX_MARGIN_UTILIZATION", 1.0),
             min_available_equity_usd=_float_env("RISK_MIN_AVAIL_EQUITY_USD", 0.0),
+            max_notional_per_symbol_usd=_float_env("RISK_MAX_NOTIONAL_PER_SYMBOL_USD", 0.0),
         ),
     )

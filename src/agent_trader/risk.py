@@ -1,4 +1,4 @@
-from typing import List
+from typing import Iterable, List, Optional, Set
 
 from agent_trader.models import AccountState, RiskDecision, RiskLimits, TradeProposal
 
@@ -9,9 +9,17 @@ ALLOWED_POSITION_ACTIONS = {"OPEN", "CLOSE"}
 
 
 
-def evaluate_trade(proposal: TradeProposal, account: AccountState, limits: RiskLimits) -> RiskDecision:
+def evaluate_trade(
+    proposal: TradeProposal,
+    account: AccountState,
+    limits: RiskLimits,
+    allowed_symbols: Optional[Iterable[str]] = None,
+) -> RiskDecision:
     reasons: List[str] = []
     normalized_side = proposal.side.lower()
+    allowlist: Optional[Set[str]] = None
+    if allowed_symbols is not None:
+        allowlist = {token for token in allowed_symbols if token}
 
     if limits.trading_halted:
         reasons.append("trading halted")
@@ -24,6 +32,11 @@ def evaluate_trade(proposal: TradeProposal, account: AccountState, limits: RiskL
 
     if proposal.position_action not in ALLOWED_POSITION_ACTIONS:
         reasons.append("unsupported position action")
+
+    if not proposal.symbol:
+        reasons.append("symbol required")
+    elif allowlist and proposal.symbol not in allowlist:
+        reasons.append("symbol not in allowed list")
 
     if proposal.notional_usd <= 0:
         reasons.append("notional must be positive")
@@ -47,6 +60,19 @@ def evaluate_trade(proposal: TradeProposal, account: AccountState, limits: RiskL
 
     if account.daily_pnl_pct <= (-1 * limits.daily_loss_limit_pct):
         reasons.append("daily loss limit breached")
+
+    # Per-symbol notional cap. Skips when we don't know the breakdown, or the
+    # limit is disabled (=0).
+    if (
+        limits.max_notional_per_symbol_usd > 0
+        and proposal.notional_usd > 0
+        and proposal.symbol
+        and account.positions_by_symbol is not None
+    ):
+        existing = account.positions_by_symbol.get(proposal.symbol, 0.0)
+        projected = existing + proposal.notional_usd
+        if projected > limits.max_notional_per_symbol_usd:
+            reasons.append("per-symbol notional limit exceeded")
 
     # Margin-aware checks. All guarded on "is this value known?" so paths that
     # don't yet supply margin info (Hummingbot sync) skip them silently.

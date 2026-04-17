@@ -7,20 +7,41 @@ from agent_trader.models import AccountState
 
 def sync_okx_account_state(
     client: Any,
-    inst_id: str,
+    inst_id: str = "",
     ccy: str = "USDT",
     daily_pnl_pct: Optional[float] = 0.0,
-    symbol_scoped: bool = True,
+    symbol_scoped: bool = False,
 ) -> AccountState:
+    """Pull account balance + all SWAP positions, and map into AccountState.
+
+    - Always returns `positions_by_symbol` with the per-instId breakdown so
+      risk engine can enforce per-symbol limits.
+    - `current_exposure_usd` is account-wide by default. When
+      `symbol_scoped=True` and `inst_id` is provided, it falls back to just
+      that single symbol's exposure (legacy single-symbol behaviour).
+    """
     balance_response = client.get_account_balance(ccy=ccy)
-    positions_response = client.get_positions(inst_id if symbol_scoped else "")
+    positions_response = client.get_positions("")
 
     equity_usd = _extract_total_equity(balance_response)
     positions = _extract_positions(positions_response)
-    if symbol_scoped:
-        positions = [position for position in positions if position.get("instId") == inst_id]
-    current_exposure_usd = sum(abs(_extract_notional_usd(position)) for position in positions)
-    open_positions = len([position for position in positions if _extract_notional_usd(position) != 0.0])
+
+    positions_by_symbol: Dict[str, float] = {}
+    for position in positions:
+        symbol = position.get("instId")
+        if not symbol:
+            continue
+        notional = abs(_extract_notional_usd(position))
+        if notional <= 0:
+            continue
+        positions_by_symbol[symbol] = positions_by_symbol.get(symbol, 0.0) + notional
+
+    if symbol_scoped and inst_id:
+        current_exposure_usd = positions_by_symbol.get(inst_id, 0.0)
+        open_positions = 1 if current_exposure_usd > 0 else 0
+    else:
+        current_exposure_usd = sum(positions_by_symbol.values())
+        open_positions = len(positions_by_symbol)
 
     resolved_daily_pnl_pct = daily_pnl_pct
     if resolved_daily_pnl_pct is None:
@@ -39,6 +60,7 @@ def sync_okx_account_state(
         available_equity_usd=available_equity_usd,
         margin_ratio=margin_ratio,
         used_margin_usd=used_margin_usd,
+        positions_by_symbol=positions_by_symbol or None,
     )
 
 

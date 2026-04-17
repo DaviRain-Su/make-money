@@ -70,6 +70,17 @@
 
 这些检查只在账户同步层能拿到相应字段时生效。OKX 原生路径已接入；Hummingbot 路径暂时留空（返回 `None`），等对应字段补上后才会触发。
 
+### 多合约支持（Step 2）
+
+- `/signal` payload 可带 `symbol` 字段；未传则回落到 `OKX_SYMBOL` 默认值
+- `/admin/manual_trade` 的 body 同样支持 `symbol`
+- `OKX_ALLOWED_SYMBOLS`（逗号分隔）设了就是白名单；**不在白名单里直接被风控拒**（`symbol not in allowed list`）。留空 = 不限制
+- `AccountState.positions_by_symbol` 把敞口按合约展开（OKX 原生已接入）
+- `RISK_MAX_NOTIONAL_PER_SYMBOL_USD`：单合约名义金额上限，防止单个合约押太重
+- `RISK_MAX_NOTIONAL_USD` 仍是账户总名义金额上限（跨合约累计）
+- Dashboard 在"按合约敞口"卡片里按 USD 倒序展示每个合约的当前名义金额
+- 多合约 cross margin 场景下，强烈建议把 `RISK_MIN_MARGIN_RATIO` / `RISK_MAX_MARGIN_UTILIZATION` / `RISK_MIN_AVAIL_EQUITY_USD` 这三道保证金闸门同步打开
+
 ## Hermes 管理面
 
 Hermes 跑在独立进程（不在这个 repo 里）。它只能通过 HMAC 签名的 HTTP 调用这里的服务，**既不持有 OKX 密钥，也改不了 `risk.py`**。

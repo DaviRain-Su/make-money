@@ -209,6 +209,7 @@ def handle_manual_trade(
         rationale=str(body.get("rationale", "hermes-manual")),
         position_action=str(body.get("position_action", "OPEN")).upper(),
         pos_side=str(body.get("pos_side", "")),
+        symbol=(body.get("symbol") or None),
     )
     result = pipeline_runner(signal=signal, current_settings=settings)
     _log_admin_event(
