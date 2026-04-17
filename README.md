@@ -260,6 +260,88 @@ print("Blocked by reason:", report.block_reasons)
 
 报告字段：`signals_total` / `signals_approved` / `signals_blocked` / `block_reasons`（按原因计数）/ `closed_trades`（每笔含 entry/exit/reason/PnL）/ `win_rate` / `max_drawdown_pct` / `total_pnl_usd` / `blocked_signals`（明细）。
 
+### 历史 K 线下载器
+
+`src/agent_trader/market_data.py` 封装了 OKX 的 `candlesticks` + `history-candlesticks` 分页下载，把结果缓存到 `var/cache/market_data/{inst}_{bar}.jsonl`。下次再调就直接从缓存读，不会再打交易所。
+
+```python
+from agent_trader.market_data import load_or_fetch_candles
+from agent_trader.main import make_okx_client
+
+client = make_okx_client()
+candles = load_or_fetch_candles(
+    client,
+    inst_id="BTC-USDT-SWAP",
+    bar="1H",
+    target_count=2000,   # 约 80 天 1H K 线
+)
+# → 写入 var/cache/market_data/BTC-USDT-SWAP_1H.jsonl
+```
+
+- `target_count` 够了就只读缓存；不够就向历史页面滚动补齐
+- `refresh=True` 强制重拉
+- 只保留 OKX 标记 `confirm=1` 的收线 bar，未收线的自动丢弃
+
+### 策略参数网格搜索
+
+`src/agent_trader/grid_search.py` 用回测器批量跑参数组合，按 "PnL - α·回撤 - β·拦截率" 打分排序，**让风控拒单率成为评分的一部分**：一个回测 PnL 看着很漂亮但 80% 的信号被风控拦下，不是好组合。
+
+```python
+from agent_trader.grid_search import grid_search_ema_atr
+from agent_trader.models import RiskLimits
+
+result = grid_search_ema_atr(
+    candles_by_symbol={"BTC-USDT-SWAP": candles},
+    param_grid={
+        "fast_ema":     [10, 15, 20],
+        "slow_ema":     [40, 50, 60],
+        "atr_period":   [10, 14, 21],
+        "atr_stop_mult":[1.5, 2.0, 2.5],
+        "atr_tp_mult":  [2.0, 3.0, 4.0],
+    },
+    initial_equity_usd=10_000.0,
+    risk_limits=RiskLimits(
+        max_notional_usd=3000.0,
+        max_leverage=5.0,
+        daily_loss_limit_pct=5.0,
+        max_slippage_bps=50.0,
+        max_notional_per_symbol_usd=1500.0,
+    ),
+    risk_fraction=0.1,
+)
+for row in result.top_summaries(n=5):
+    print(row)
+```
+
+输出每行含：参数组合、`total_pnl_usd`、`win_rate`、`max_drawdown_pct`、`block_rate`、`top_block_reasons`。
+
+- 默认跳过 `fast_ema >= slow_ema` 的无效组合
+- 评分函数可通过 `drawdown_weight` / `block_weight` 调整（见 `GridSearchResult.ranked_by_score`）
+
+### 一条命令做完"下载 + 回测 + 调参"
+
+```python
+from agent_trader.main import make_okx_client
+from agent_trader.market_data import load_or_fetch_candles
+from agent_trader.grid_search import grid_search_ema_atr
+from agent_trader.models import RiskLimits
+
+client = make_okx_client()
+candles = {
+    sym: load_or_fetch_candles(client, sym, bar="1H", target_count=2000)
+    for sym in ("BTC-USDT-SWAP", "ETH-USDT-SWAP")
+}
+result = grid_search_ema_atr(
+    candles_by_symbol=candles,
+    param_grid={"fast_ema": [10, 15, 20], "slow_ema": [40, 50, 60]},
+    initial_equity_usd=10_000.0,
+    risk_limits=RiskLimits(max_notional_usd=3000, max_leverage=5, daily_loss_limit_pct=5, max_slippage_bps=50),
+    allowed_symbols=("BTC-USDT-SWAP", "ETH-USDT-SWAP"),
+)
+for row in result.top_summaries(n=10):
+    print(row)
+```
+
 ## Hermes 管理面
 
 Hermes 跑在独立进程（不在这个 repo 里）。它只能通过 HMAC 签名的 HTTP 调用这里的服务，**既不持有 OKX 密钥，也改不了 `risk.py`**。

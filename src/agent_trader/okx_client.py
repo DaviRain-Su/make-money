@@ -122,6 +122,20 @@ class OKXClient:
         """Raw OKX candlestick response. Order is newest-first per OKX spec."""
         return self.market_api.get_candlesticks(instId=inst_id, bar=bar, limit=limit)
 
+    def get_history_candles(
+        self,
+        inst_id: str,
+        bar: str = "1H",
+        after: str = "",
+        before: str = "",
+        limit: str = "100",
+    ) -> Any:
+        """Deeper history page. `after` is an upper-bound ts (ms, exclusive);
+        OKX returns bars strictly older than it, newest-first."""
+        return self.market_api.get_history_candlesticks(
+            instId=inst_id, bar=bar, after=after, before=before, limit=limit
+        )
+
     def _resolve_pos_side(self, side: str, pos_side: str = "") -> str:
         if pos_side:
             return pos_side
