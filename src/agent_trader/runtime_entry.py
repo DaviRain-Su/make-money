@@ -1,6 +1,6 @@
 from typing import Any, Callable
 
-from agent_trader.main import make_okx_ws_client, reconcile_open_orders_payload
+from agent_trader.main import build_strategy_scheduler, make_okx_ws_client, reconcile_open_orders_payload
 from agent_trader.okx_ws import OKXWebSocketManager
 from agent_trader.okx_ws_transport import AsyncWebSocketTransport, connect_with_websockets
 from agent_trader.reconcile_scheduler import ReconcileScheduler
@@ -23,5 +23,12 @@ def build_runtime_daemon(current_settings, load_open_orders: Callable[[], list])
         timestamp_fn=lambda: "0",
         websocket_factory=lambda: transport,
     )
-    daemon = RuntimeDaemon(supervisor=supervisor, load_open_orders=load_open_orders)
+    strategy_scheduler = None
+    if getattr(current_settings, "strategy_enabled", False):
+        strategy_scheduler = build_strategy_scheduler(current_settings)
+    daemon = RuntimeDaemon(
+        supervisor=supervisor,
+        load_open_orders=load_open_orders,
+        strategy_scheduler=strategy_scheduler,
+    )
     return daemon

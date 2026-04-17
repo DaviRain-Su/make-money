@@ -75,6 +75,60 @@ class RuntimeDaemonTests(unittest.IsolatedAsyncioTestCase):
         daemon.stop()
         self.assertFalse(daemon.running)
 
+    async def test_run_forever_runs_supervisor_and_scheduler_concurrently(self):
+        supervisor = FakeSupervisor()
+        scheduler_ticks = []
+
+        class FakeStrategyScheduler:
+            async def run_forever(self, should_continue, sleep_fn):
+                while should_continue():
+                    scheduler_ticks.append(1)
+                    await sleep_fn(0)
+
+        sup_counter = {"n": 0}
+        sched_counter = {"n": 0}
+
+        async def fake_sleep(_s):
+            await asyncio.sleep(0)
+
+        def should_continue():
+            # called by both loops; each loop's call counts separately via the
+            # relative frame is too clever — instead, let both keep going for
+            # a handful of iterations then return False.
+            sup_counter["n"] += 1
+            return sup_counter["n"] <= 6
+
+        daemon = RuntimeDaemon(
+            supervisor=supervisor,
+            load_open_orders=lambda: [{"symbol": "X", "order_id": "1"}],
+            strategy_scheduler=FakeStrategyScheduler(),
+        )
+
+        await daemon.run_forever(should_continue=should_continue, sleep_fn=fake_sleep)
+
+        self.assertGreaterEqual(len(supervisor.calls), 1)
+        self.assertGreaterEqual(len(scheduler_ticks), 1)
+        self.assertFalse(daemon.running)
+
+    async def test_run_forever_skips_scheduler_when_none(self):
+        supervisor = FakeSupervisor()
+        ticks = {"n": 0}
+
+        async def fake_sleep(_s):
+            await asyncio.sleep(0)
+
+        def should_continue():
+            ticks["n"] += 1
+            return ticks["n"] <= 2
+
+        daemon = RuntimeDaemon(
+            supervisor=supervisor,
+            load_open_orders=lambda: [],
+            strategy_scheduler=None,
+        )
+        await daemon.run_forever(should_continue=should_continue, sleep_fn=fake_sleep)
+        self.assertGreaterEqual(len(supervisor.calls), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
