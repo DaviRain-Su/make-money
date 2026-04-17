@@ -112,8 +112,9 @@ Do not jump to full autonomy. Recommended order:
 3. inspect appended JSONL audit events under `AUDIT_LOG_PATH`
 4. paper execution path with reconciliation fields in the response payload
 5. verify websocket login/subscribe flow against `OKX_WS_URL`
-6. run `run_demo_validation_workflow(...)` with OKX demo credentials
-7. OKX demo mode with `OKX_FLAG=1`
-8. verify order status reconciliation against OKX demo orders
-9. very small OKX live size with `OKX_FLAG=0`
-10. expand only after logs + risk checks are trustworthy
+6. exercise async ws manager `run_once()` / `reconnect_async()` with a safe test transport
+7. run `run_demo_validation_workflow(...)` with OKX demo credentials
+8. OKX demo mode with `OKX_FLAG=1`
+9. verify order status reconciliation against OKX demo orders
+10. very small OKX live size with `OKX_FLAG=0`
+11. expand only after logs + risk checks are trustworthy

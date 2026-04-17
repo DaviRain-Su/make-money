@@ -50,6 +50,7 @@ Safety defaults:
 - `src/agent_trader/okx_order_service.py`
 - `src/agent_trader/okx_ws.py`
 - `src/agent_trader/reconcile_job.py`
+- `src/agent_trader/reconcile_scheduler.py`
 - `src/agent_trader/audit_log.py`
 - native execution now:
   - resolves `ctVal` and converts USD notionals into OKX swap contract counts
@@ -60,7 +61,12 @@ Safety defaults:
 - websocket/runtime scaffolding now:
   - builds private login + subscribe payloads for orders/positions/account
   - supports basic handler registration, ping, and reconnect skeleton
+  - supports async connect/run_once/reconnect skeleton for future receive loops
   - exposes ws URL via settings for demo/live switching
+- reconciliation scaffolding now:
+  - immediate reconciliation after submission
+  - batch reconciliation jobs for open orders
+  - scheduler skeleton for periodic polling loops
 - `src/agent_trader/main.py` native helpers:
   - `make_okx_client()`
   - `okx_account_state_payload()`
@@ -70,9 +76,9 @@ Safety defaults:
 
 ## Next native steps
 
-1. connect websocket manager to a real async transport with heartbeat + reconnect loop
-2. add real demo-trading integration test with `OKX_FLAG=1`
-3. promote from paper mode to demo mode, then tiny live size
-4. add periodic reconciliation scheduler for stuck/live orders
+1. connect websocket manager to a real async transport with heartbeat + reconnect backoff loop
+2. hook reconciliation scheduler to a real open-order loader and background task runner
+3. add real demo-trading integration test with `OKX_FLAG=1`
+4. promote from paper mode to demo mode, then tiny live size
 5. enrich audit events with full proposal/risk snapshots for post-trade analytics
 6. add persistent idempotency cleanup/TTL strategy for long-running deployments
