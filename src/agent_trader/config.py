@@ -91,5 +91,8 @@ def load_settings() -> Settings:
             max_slippage_bps=_float_env("RISK_MAX_SLIPPAGE_BPS", 15.0),
             min_equity_usd=_float_env("RISK_MIN_EQUITY_USD", 50.0),
             trading_halted=_bool_env("TRADING_HALTED", False),
+            min_margin_ratio=_float_env("RISK_MIN_MARGIN_RATIO", 0.0),
+            max_margin_utilization=_float_env("RISK_MAX_MARGIN_UTILIZATION", 1.0),
+            min_available_equity_usd=_float_env("RISK_MIN_AVAIL_EQUITY_USD", 0.0),
         ),
     )

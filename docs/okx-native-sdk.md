@@ -56,6 +56,7 @@
 - `src/agent_trader/runtime_daemon.py`
 - `src/agent_trader/runtime_entry.py`
 - `src/agent_trader/demo_smoke.py`
+- `src/agent_trader/cli.py`
 - `src/agent_trader/audit_log.py`
 - 原生执行现在已经：
   - 查 `ctVal`，把 USD notional 正确换算成 OKX 合约张数
@@ -68,6 +69,7 @@
   - 支持 handler 注册、ping、重连和 async run-once 骨架
   - 提供 transport 抽象以便接入真实 websocket 连接
   - 提供 daemon / supervisor / entry builder 骨架，供长运行编排使用
+  - 提供 CLI 入口，可执行 runtime-once 和 demo-smoke 命令
   - 通过配置暴露 ws URL，方便在 demo / live 之间切换
 - 对账 / 运行时脚手架：
   - 下单完成后立即对账
@@ -84,7 +86,7 @@
 
 ## 原生路径后续要做的事
 
-1. 把 `build_runtime_daemon(...)` 接到真实 CLI / 进程入口
+1. 把 `build_runtime_daemon(...)` 接到真实守护进程/CLI 运行入口
 2. 用真实 demo 凭证跑一条 `run_demo_smoke_test(...)` 流程
 3. paper → demo → 极小真实仓位，逐步放开
 4. 审计事件里丰富 proposal / risk 快照，方便交易后分析

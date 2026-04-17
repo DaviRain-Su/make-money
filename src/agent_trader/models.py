@@ -10,6 +10,12 @@ class RiskLimits:
     max_slippage_bps: float
     min_equity_usd: float = 50.0
     trading_halted: bool = False
+    # 低于该保证金率视为接近爆仓；0 = 关闭此检查。
+    min_margin_ratio: float = 0.0
+    # (已用保证金 + 新仓初始保证金) / 总权益 超过该值拒单；1.0 = 关闭此检查。
+    max_margin_utilization: float = 1.0
+    # 可用保证金低于该值拒单；0 = 关闭此检查。
+    min_available_equity_usd: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -18,6 +24,12 @@ class AccountState:
     daily_pnl_pct: float
     current_exposure_usd: float
     open_positions: int
+    # 可用保证金（OKX availEq）。None 表示未知 / 未采样，对应的风控检查会跳过。
+    available_equity_usd: Optional[float] = None
+    # 账户级保证金率（OKX mgnRatio）。None 表示未知。
+    margin_ratio: Optional[float] = None
+    # 已用初始保证金（OKX imr）。None 表示未知。
+    used_margin_usd: Optional[float] = None
 
 
 @dataclass(frozen=True)

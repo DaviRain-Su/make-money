@@ -10,5 +10,8 @@ dependencies = [
   "python-okx>=0.4.1"
 ]
 
+[project.scripts]
+agent-trader = "agent_trader.cli:main"
+
 [tool.unittest]
 start-directory = "tests"

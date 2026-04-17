@@ -58,6 +58,18 @@
 - 所有下单路径（策略的 `/signal` + Hermes 的 `/admin/manual_trade`）**都要过** `evaluate_trade` 这一道硬风控
 - `RiskLimits.trading_halted`（环境变量）和 `control.json`（运行时持久化）两个暂停开关任一生效即拒单
 
+### 保证金感知风控（Step 1）
+
+`AccountState` 除了总权益、日内盈亏、持仓敞口，还会携带 OKX 返回的 **可用保证金 `availEq`**、**账户级保证金率 `mgnRatio`** 和 **已用初始保证金 `imr`**。风控引擎据此多加三道闸门：
+
+- `RISK_MIN_MARGIN_RATIO`：账户级 `mgnRatio` 低于该值时拒单。数值越大越健康，接近 1.0 即临近强平。默认 `0`（关闭）。
+- `RISK_MAX_MARGIN_UTILIZATION`：`(已用保证金 + 新仓初始保证金) / 总权益` 超过该值时拒单。默认 `1.0`（关闭）；cross margin 多合约建议调到 `0.5`。
+- `RISK_MIN_AVAIL_EQUITY_USD`：可用保证金低于该值时拒单。默认 `0`（关闭）。
+
+另外：**如果新仓所需初始保证金本身就超过可用保证金**，即使未设阈值也会被直接拒（`insufficient available margin for new position`）。
+
+这些检查只在账户同步层能拿到相应字段时生效。OKX 原生路径已接入；Hummingbot 路径暂时留空（返回 `None`），等对应字段补上后才会触发。
+
 ## Hermes 管理面
 
 Hermes 跑在独立进程（不在这个 repo 里）。它只能通过 HMAC 签名的 HTTP 调用这里的服务，**既不持有 OKX 密钥，也改不了 `risk.py`**。
@@ -114,8 +126,9 @@ PYTHONPATH=src python3 -m unittest -v
 6. 用安全的测试 transport 跑一遍 ws manager 的 `run_once()` / `reconnect_async()`
 7. 用安全的测试 transport + 假的未完成订单跑 `RuntimeSupervisor.run_iteration()`
 8. 用假组件跑 `RuntimeDaemon.run_once()`
-9. 用 OKX demo 凭据跑 `run_demo_validation_workflow(...)`
-10. 切到 OKX demo 模式（`OKX_FLAG=1`）
-11. 在 demo 环境对照订单状态校对
-12. 用极小仓位切 OKX 真实环境（`OKX_FLAG=0`）
-13. 只有在日志 + 风控长期表现可靠之后才扩大规模
+9. 用 `build_runtime_daemon(...)` 组装完整运行时骨架
+10. 用 OKX demo 凭据跑 `run_demo_smoke_test(...)`
+11. 切到 OKX demo 模式（`OKX_FLAG=1`）
+12. 在 demo 环境对照订单状态校对
+13. 用极小仓位切 OKX 真实环境（`OKX_FLAG=0`）
+14. 只有在日志 + 风控长期表现可靠之后才扩大规模

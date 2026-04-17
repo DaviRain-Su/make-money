@@ -27,12 +27,33 @@ def sync_okx_account_state(
         bills_response = client.get_account_bills(inst_type="SWAP", ccy=ccy, limit="100")
         resolved_daily_pnl_pct = _extract_daily_pnl_pct_from_bills(bills_response, equity_usd)
 
+    available_equity_usd = _extract_account_float(balance_response, "availEq")
+    margin_ratio = _extract_account_float(balance_response, "mgnRatio")
+    used_margin_usd = _extract_account_float(balance_response, "imr")
+
     return AccountState(
         equity_usd=equity_usd,
         daily_pnl_pct=resolved_daily_pnl_pct,
         current_exposure_usd=current_exposure_usd,
         open_positions=open_positions,
+        available_equity_usd=available_equity_usd,
+        margin_ratio=margin_ratio,
+        used_margin_usd=used_margin_usd,
     )
+
+
+
+def _extract_account_float(balance_response: Dict[str, Any], key: str) -> Optional[float]:
+    rows = balance_response.get("data", []) if isinstance(balance_response, dict) else []
+    if not rows:
+        return None
+    value = rows[0].get(key)
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 
