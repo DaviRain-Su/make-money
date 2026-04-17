@@ -15,6 +15,7 @@ from agent_trader.okx_ws import OKXWebSocketClient
 from agent_trader.proposal_service import build_trade_proposal
 from agent_trader.reconcile_job import reconcile_open_orders_job
 from agent_trader.alerting import classify_signal_result, push_alert
+from agent_trader.alt_screener import screen_okx_alt_swaps
 from agent_trader.freqtrade_adapter import translate_freqtrade_webhook
 from agent_trader.freqtrade_reconciler import force_exit_trade
 from agent_trader.risk import evaluate_trade
@@ -612,13 +613,30 @@ def ui_resume_action(
     return {"trading_halted": False}
 
 
-def resolve_strategy_symbols(current_settings: Optional[Settings] = None) -> tuple:
+def resolve_strategy_symbols(current_settings: Optional[Settings] = None, client: Optional[OKXClient] = None) -> tuple:
     resolved = current_settings or get_settings()
     if resolved.strategy_symbols:
-        return resolved.strategy_symbols
-    if resolved.okx_allowed_symbols:
-        return resolved.okx_allowed_symbols
-    return (resolved.okx_symbol,)
+        base_symbols = tuple(resolved.strategy_symbols)
+    elif resolved.okx_allowed_symbols:
+        base_symbols = tuple(resolved.okx_allowed_symbols)
+    else:
+        base_symbols = (resolved.okx_symbol,)
+    if not resolved.strategy_alt_screener_enabled:
+        return base_symbols
+    active_client = client or make_okx_client(resolved)
+    screened = screen_okx_alt_swaps(
+        client=active_client,
+        top_n=resolved.strategy_alt_top_n,
+        min_change_pct=resolved.strategy_alt_min_change_pct,
+        min_volume_24h=resolved.strategy_alt_min_volume_24h,
+        exclude_symbols=resolved.strategy_alt_exclude_symbols,
+    )
+    combined = list(base_symbols)
+    for row in screened:
+        symbol = row.get("instId")
+        if symbol and symbol not in combined:
+            combined.append(symbol)
+    return tuple(combined)
 
 
 def build_strategy_config(current_settings: Optional[Settings] = None) -> EmaAtrConfig:
@@ -632,6 +650,7 @@ def build_strategy_config(current_settings: Optional[Settings] = None) -> EmaAtr
         leverage=resolved.strategy_leverage,
         confidence=resolved.strategy_confidence,
         expected_slippage_bps=resolved.strategy_expected_slippage_bps,
+        higher_tf_slow_ema=resolved.strategy_higher_tf_slow_ema,
     )
 
 
@@ -663,7 +682,7 @@ def run_strategy_poll(
         )
 
     effective_dispatch = dispatch or default_dispatch
-    symbols = resolve_strategy_symbols(resolved)
+    symbols = resolve_strategy_symbols(resolved, client=active_client)
     strategy_config = build_strategy_config(resolved)
     results = run_strategy_once(
         client=active_client,
@@ -672,6 +691,7 @@ def run_strategy_poll(
         candle_limit=resolved.strategy_candle_limit,
         strategy_config=strategy_config,
         dispatch=effective_dispatch,
+        higher_tf_bar=resolved.strategy_higher_tf_bar or None,
     )
     log_pipeline_event(
         "strategy_poll",

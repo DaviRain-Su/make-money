@@ -57,6 +57,8 @@ class EmaAtrConfig:
     confidence: float = 0.6
     expected_slippage_bps: float = 8.0
     rationale: str = "ema_atr"
+    # 可选：更高时间周期的 EMA 斜率共振确认；0 = 关闭此过滤
+    higher_tf_slow_ema: int = 0
 
 
 
@@ -108,10 +110,17 @@ def generate_ema_atr_signal(
     symbol: str,
     candles: List[Candle],
     config: EmaAtrConfig,
+    higher_tf_candles: Optional[List[Candle]] = None,
 ) -> Optional[StrategySignal]:
     """Inspects the most recent closed candle and returns a StrategySignal if
     a fast/slow EMA crossover just occurred. Candles must be oldest-first and
-    contain only closed bars (caller drops any in-progress candle)."""
+    contain only closed bars (caller drops any in-progress candle).
+
+    When `config.higher_tf_slow_ema > 0`, the caller must supply
+    `higher_tf_candles` (closed bars of a higher timeframe). The signal is
+    only emitted when the higher-timeframe slow-EMA slope agrees with the
+    primary crossover direction — this is the multi-timeframe filter.
+    """
     if len(candles) <= max(config.slow_ema, config.atr_period) + 1:
         return None
 
@@ -134,6 +143,10 @@ def generate_ema_atr_signal(
     crossed_down = fast_prev >= slow_prev and fast_last < slow_last
     if not (crossed_up or crossed_down):
         return None
+
+    if config.higher_tf_slow_ema > 0:
+        if not _higher_tf_trend_confirms(higher_tf_candles, config.higher_tf_slow_ema, crossed_up):
+            return None
 
     entry = candles[last].close
     side = "buy" if crossed_up else "sell"
@@ -158,3 +171,24 @@ def generate_ema_atr_signal(
         rationale=f"{config.rationale}:{config.fast_ema}/{config.slow_ema}",
         symbol=symbol,
     )
+
+
+
+def _higher_tf_trend_confirms(
+    higher_tf_candles: Optional[List[Candle]],
+    slow_ema_period: int,
+    crossed_up: bool,
+) -> bool:
+    """Return True iff the higher-TF slow-EMA slope agrees with the primary
+    crossover direction. Missing data → reject (fail-closed)."""
+    if higher_tf_candles is None or len(higher_tf_candles) < slow_ema_period + 1:
+        return False
+    htf_closes = [c.close for c in higher_tf_candles]
+    htf_slow = compute_ema(htf_closes, slow_ema_period)
+    htf_last = htf_slow[-1]
+    htf_prev = htf_slow[-2]
+    if htf_last is None or htf_prev is None:
+        return False
+    if crossed_up:
+        return htf_last > htf_prev
+    return htf_last < htf_prev

@@ -57,6 +57,9 @@ class Settings:
     strategy_leverage: float = 2.0
     strategy_confidence: float = 0.6
     strategy_expected_slippage_bps: float = 8.0
+    # 多时间周期共振过滤；higher_tf_slow_ema=0 关闭
+    strategy_higher_tf_bar: str = ""
+    strategy_higher_tf_slow_ema: int = 0
     # freqtrade 反向 adapter
     freqtrade_api_url: str = ""
     freqtrade_api_username: str = ""
@@ -65,6 +68,12 @@ class Settings:
     # 告警 webhook（为空则全关）
     alert_webhook_url: str = ""
     alert_timeout_seconds: float = 5.0
+    # 山寨币筛选观察池
+    strategy_alt_screener_enabled: bool = False
+    strategy_alt_top_n: int = 10
+    strategy_alt_min_change_pct: float = 1.0
+    strategy_alt_min_volume_24h: float = 5_000_000.0
+    strategy_alt_exclude_symbols: Tuple[str, ...] = ()
 
 
 
@@ -152,10 +161,17 @@ def load_settings() -> Settings:
         strategy_leverage=_float_env("STRATEGY_LEVERAGE", 2.0),
         strategy_confidence=_float_env("STRATEGY_CONFIDENCE", 0.6),
         strategy_expected_slippage_bps=_float_env("STRATEGY_EXPECTED_SLIPPAGE_BPS", 8.0),
+        strategy_higher_tf_bar=os.getenv("STRATEGY_HIGHER_TF_BAR", ""),
+        strategy_higher_tf_slow_ema=_int_env("STRATEGY_HIGHER_TF_SLOW_EMA", 0),
         freqtrade_api_url=os.getenv("FREQTRADE_API_URL", ""),
         freqtrade_api_username=os.getenv("FREQTRADE_API_USERNAME", ""),
         freqtrade_api_password=os.getenv("FREQTRADE_API_PASSWORD", ""),
         freqtrade_reconcile_on_block=_bool_env("FREQTRADE_RECONCILE_ON_BLOCK", False),
         alert_webhook_url=os.getenv("ALERT_WEBHOOK_URL", ""),
         alert_timeout_seconds=_float_env("ALERT_TIMEOUT_SECONDS", 5.0),
+        strategy_alt_screener_enabled=_bool_env("STRATEGY_ALT_SCREENER_ENABLED", False),
+        strategy_alt_top_n=_int_env("STRATEGY_ALT_TOP_N", 10),
+        strategy_alt_min_change_pct=_float_env("STRATEGY_ALT_MIN_CHANGE_PCT", 1.0),
+        strategy_alt_min_volume_24h=_float_env("STRATEGY_ALT_MIN_VOLUME_24H", 5_000_000.0),
+        strategy_alt_exclude_symbols=_tuple_env("STRATEGY_ALT_EXCLUDE_SYMBOLS"),
     )

@@ -16,14 +16,22 @@ def run_strategy_once(
     candle_limit: int,
     strategy_config: EmaAtrConfig,
     dispatch: Callable[[Dict[str, Any]], Dict[str, Any]],
+    higher_tf_bar: Optional[str] = None,
+    higher_tf_candle_limit: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """For each symbol, fetch candles, run EMA/ATR, dispatch signal if any.
 
     `dispatch` takes a request payload (the same shape /signal expects) and
     returns the pipeline result. The caller supplies this so unit tests can
     inject a fake sink and production can wire it to process_signal_request_payload.
+
+    When `strategy_config.higher_tf_slow_ema > 0` and `higher_tf_bar` is given,
+    an additional candle series is fetched on that bar and passed to the signal
+    generator for multi-timeframe trend confirmation.
     """
     results: List[Dict[str, Any]] = []
+    want_mtf = strategy_config.higher_tf_slow_ema > 0 and higher_tf_bar
+    htf_limit = str(higher_tf_candle_limit or max(strategy_config.higher_tf_slow_ema * 3, 100))
     for symbol in symbols:
         if not symbol:
             continue
@@ -33,7 +41,15 @@ def run_strategy_once(
             results.append({"symbol": symbol, "status": "fetch_error", "error": f"{type(exc).__name__}: {exc}"})
             continue
         candles = parse_okx_candles(candle_resp)
-        signal = generate_ema_atr_signal(symbol, candles, strategy_config)
+        higher_tf_candles = None
+        if want_mtf:
+            try:
+                htf_resp = client.get_candles(symbol, bar=higher_tf_bar, limit=htf_limit)
+                higher_tf_candles = parse_okx_candles(htf_resp)
+            except Exception as exc:  # noqa: BLE001
+                results.append({"symbol": symbol, "status": "fetch_error", "error": f"higher_tf: {type(exc).__name__}: {exc}"})
+                continue
+        signal = generate_ema_atr_signal(symbol, candles, strategy_config, higher_tf_candles=higher_tf_candles)
         if signal is None:
             results.append({"symbol": symbol, "status": "no_signal", "bars": len(candles)})
             continue
