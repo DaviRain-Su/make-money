@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 
 @dataclass(frozen=True)
@@ -18,6 +18,11 @@ class RiskLimits:
     min_available_equity_usd: float = 0.0
     # 单合约名义金额上限（该合约已有敞口 + 新仓 notional）；0 = 关闭此检查。
     max_notional_per_symbol_usd: float = 0.0
+    # 任何持仓距离强平 (|markPx - liqPx| / markPx) 小于该比例时，禁止开新仓。
+    # 0 = 关闭此检查。例：0.1 表示离强平价 < 10% 就停止开新仓。
+    min_liquidation_distance_pct: float = 0.0
+    # 最多同时持有多少个合约；0 = 关闭此检查。加仓既有合约不受限。
+    max_open_positions: int = 0
 
 
 @dataclass(frozen=True)
@@ -34,6 +39,9 @@ class AccountState:
     used_margin_usd: Optional[float] = None
     # 按合约展开的敞口（instId → |notional_usd|）。None 表示未知（会跳过单合约风控）。
     positions_by_symbol: Optional[Dict[str, float]] = None
+    # 每个持仓的详情（instId → {mark_px, liq_px, distance_pct, side, notional_usd}）。
+    # None 表示未知，对应的强平距离风控会跳过。
+    positions_detail: Optional[Dict[str, Dict[str, Any]]] = None
 
 
 @dataclass(frozen=True)

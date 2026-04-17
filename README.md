@@ -81,6 +81,13 @@
 - Dashboard 在"按合约敞口"卡片里按 USD 倒序展示每个合约的当前名义金额
 - 多合约 cross margin 场景下，强烈建议把 `RISK_MIN_MARGIN_RATIO` / `RISK_MAX_MARGIN_UTILIZATION` / `RISK_MIN_AVAIL_EQUITY_USD` 这三道保证金闸门同步打开
 
+### 强平距离 + 并发持仓数（Step 3）
+
+- `AccountState.positions_detail` 把每个持仓的 `markPx` / `liqPx` / `distance_pct`（`|mark-liq|/mark`）/ `side` 单独记下来
+- `RISK_MIN_LIQUIDATION_DISTANCE_PCT`：任意持仓到强平价的距离小于该比例时，禁止开新仓（平仓和减仓不受限）。防止在某个合约已经濒危时继续加风险
+- `RISK_MAX_OPEN_POSITIONS`：最多同时持有多少个不同合约。到上限后只能加仓既有合约或平仓，不能再开新合约
+- Dashboard 的"按合约敞口"卡片现在同时展示方向、markPx、liqPx 和距离（小于 5% 红色，小于 15% 黄色，其余绿色）
+
 ## Hermes 管理面
 
 Hermes 跑在独立进程（不在这个 repo 里）。它只能通过 HMAC 签名的 HTTP 调用这里的服务，**既不持有 OKX 密钥，也改不了 `risk.py`**。

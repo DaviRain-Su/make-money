@@ -114,5 +114,7 @@ def load_settings() -> Settings:
             max_margin_utilization=_float_env("RISK_MAX_MARGIN_UTILIZATION", 1.0),
             min_available_equity_usd=_float_env("RISK_MIN_AVAIL_EQUITY_USD", 0.0),
             max_notional_per_symbol_usd=_float_env("RISK_MAX_NOTIONAL_PER_SYMBOL_USD", 0.0),
+            min_liquidation_distance_pct=_float_env("RISK_MIN_LIQUIDATION_DISTANCE_PCT", 0.0),
+            max_open_positions=_int_env("RISK_MAX_OPEN_POSITIONS", 0),
         ),
     )

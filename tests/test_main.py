@@ -47,6 +47,7 @@ class MainModuleTests(unittest.TestCase):
                 "margin_ratio": None,
                 "used_margin_usd": None,
                 "positions_by_symbol": None,
+                "positions_detail": None,
                 "account_name": "primary",
                 "connector": "okx_perpetual",
                 "symbol": "BTC-USDT-SWAP",

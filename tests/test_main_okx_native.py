@@ -77,6 +77,7 @@ class MainOKXNativeTests(unittest.TestCase):
                 "margin_ratio": None,
                 "used_margin_usd": None,
                 "positions_by_symbol": None,
+                "positions_detail": None,
                 "account_name": "primary",
                 "connector": "okx_native",
                 "symbol": "BTC-USDT-SWAP",

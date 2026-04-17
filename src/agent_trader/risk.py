@@ -74,6 +74,32 @@ def evaluate_trade(
         if projected > limits.max_notional_per_symbol_usd:
             reasons.append("per-symbol notional limit exceeded")
 
+    # Max concurrent open positions. Only applies to OPEN actions on brand-new
+    # symbols; adding to an existing position (or closing) always allowed.
+    if (
+        limits.max_open_positions > 0
+        and proposal.position_action == "OPEN"
+        and account.positions_by_symbol is not None
+        and len(account.positions_by_symbol) >= limits.max_open_positions
+        and (proposal.symbol or "") not in account.positions_by_symbol
+    ):
+        reasons.append("too many open positions")
+
+    # Liquidation-distance guard. If any position sits too close to its
+    # liquidation price, block new opens to avoid piling risk on a fragile book.
+    if (
+        limits.min_liquidation_distance_pct > 0
+        and proposal.position_action == "OPEN"
+        and account.positions_detail
+    ):
+        for sym, detail in account.positions_detail.items():
+            distance = detail.get("distance_pct") if isinstance(detail, dict) else None
+            if distance is None:
+                continue
+            if distance < limits.min_liquidation_distance_pct:
+                reasons.append("position near liquidation")
+                break
+
     # Margin-aware checks. All guarded on "is this value known?" so paths that
     # don't yet supply margin info (Hummingbot sync) skip them silently.
     if (
