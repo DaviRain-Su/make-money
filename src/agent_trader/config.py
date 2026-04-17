@@ -57,6 +57,11 @@ class Settings:
     strategy_leverage: float = 2.0
     strategy_confidence: float = 0.6
     strategy_expected_slippage_bps: float = 8.0
+    # freqtrade 反向 adapter
+    freqtrade_api_url: str = ""
+    freqtrade_api_username: str = ""
+    freqtrade_api_password: str = ""
+    freqtrade_reconcile_on_block: bool = False
 
 
 
@@ -144,4 +149,8 @@ def load_settings() -> Settings:
         strategy_leverage=_float_env("STRATEGY_LEVERAGE", 2.0),
         strategy_confidence=_float_env("STRATEGY_CONFIDENCE", 0.6),
         strategy_expected_slippage_bps=_float_env("STRATEGY_EXPECTED_SLIPPAGE_BPS", 8.0),
+        freqtrade_api_url=os.getenv("FREQTRADE_API_URL", ""),
+        freqtrade_api_username=os.getenv("FREQTRADE_API_USERNAME", ""),
+        freqtrade_api_password=os.getenv("FREQTRADE_API_PASSWORD", ""),
+        freqtrade_reconcile_on_block=_bool_env("FREQTRADE_RECONCILE_ON_BLOCK", False),
     )

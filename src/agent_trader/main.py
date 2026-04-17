@@ -15,6 +15,7 @@ from agent_trader.okx_ws import OKXWebSocketClient
 from agent_trader.proposal_service import build_trade_proposal
 from agent_trader.reconcile_job import reconcile_open_orders_job
 from agent_trader.freqtrade_adapter import translate_freqtrade_webhook
+from agent_trader.freqtrade_reconciler import force_exit_trade
 from agent_trader.risk import evaluate_trade
 from agent_trader.signal_security import ensure_signal_not_duplicate, verify_signal_auth
 from agent_trader.strategy import EmaAtrConfig
@@ -459,6 +460,47 @@ def reconcile_open_orders_payload(
 
 
 
+def _maybe_reconcile_freqtrade(
+    payload: Dict[str, Any],
+    pipeline_result: Dict[str, Any],
+    current_settings: Optional[Settings] = None,
+) -> Optional[Dict[str, Any]]:
+    """If freqtrade thinks a trade is open but we blocked it, call freqtrade's
+    forceexit endpoint so its internal DB drops the phantom position."""
+    resolved = current_settings or get_settings()
+    if not resolved.freqtrade_reconcile_on_block:
+        return None
+    execution_status = (pipeline_result.get("execution") or {}).get("status")
+    if execution_status != "blocked":
+        return None
+    trade_id = payload.get("trade_id") or payload.get("id")
+    if trade_id in (None, ""):
+        return {"status": "skipped", "reason": "no trade_id"}
+    if not resolved.freqtrade_api_url:
+        return {"status": "skipped", "reason": "freqtrade api url not configured"}
+    try:
+        force_exit_trade(
+            api_url=resolved.freqtrade_api_url,
+            username=resolved.freqtrade_api_username,
+            password=resolved.freqtrade_api_password,
+            trade_id=trade_id,
+        )
+        outcome = {"status": "ok", "trade_id": trade_id}
+    except Exception as exc:  # noqa: BLE001
+        outcome = {"status": "error", "trade_id": trade_id, "error": f"{type(exc).__name__}: {exc}"}
+    log_pipeline_event(
+        "freqtrade_reconcile",
+        {
+            "trade_id": trade_id,
+            "outcome": outcome.get("status"),
+            "error": outcome.get("error"),
+            "risk_reasons": (pipeline_result.get("risk") or {}).get("reasons"),
+        },
+        current_settings=resolved,
+    )
+    return outcome
+
+
 def build_ui_summary_payload(
     current_settings: Optional[Settings] = None,
     account_fn: Optional[Any] = None,
@@ -765,9 +807,17 @@ try:
             signal_payload = translate_freqtrade_webhook(payload)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        return process_signal_request_payload(
+        result = process_signal_request_payload(
             signal_payload, current_settings=resolved, auth_header=x_signal_secret
         )
+        reconcile_info = _maybe_reconcile_freqtrade(
+            payload=payload,
+            pipeline_result=result,
+            current_settings=resolved,
+        )
+        if reconcile_info is not None:
+            result["freqtrade_reconcile"] = reconcile_info
+        return result
 
     @app.get("/admin/status")
     def admin_status(
