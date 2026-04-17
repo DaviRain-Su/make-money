@@ -130,6 +130,12 @@ class OKXClient:
             raise RuntimeError("OKX public API client is not configured")
         return self.public_api.get_instruments(instType=inst_type)
 
+    def get_funding_rate(self, inst_id: str) -> Any:
+        """Latest funding rate for a SWAP instrument."""
+        if self.public_api is None:
+            raise RuntimeError("OKX public API client is not configured")
+        return self.public_api.get_funding_rate(instId=inst_id)
+
     def get_history_candles(
         self,
         inst_id: str,
