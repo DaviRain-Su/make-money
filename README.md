@@ -187,6 +187,79 @@ enter/exit webhook fires  ──────> translate_freqtrade_webhook
 - 只用 freqtrade 回测，不实盘运行——选出参数后把策略抄到我们的 `strategy.py`
 - 只用 agent_trader 的风控——freqtrade 继续自己下单到另一个账户，我们的 `/admin/manual_trade` 作为应急通道
 
+### 反向 adapter（被风控拦下时同步 freqtrade 状态）
+
+freqtrade 发出 webhook 时，它自己的内部 DB 已经假设这单开成了。如果我们风控层拒绝执行，freqtrade 那边就留下一个幻影持仓。`freqtrade_reconciler.force_exit_trade` 会在这种情况下自动调 freqtrade 的 `/api/v1/forceexit` 把那笔虚拟仓位清掉。
+
+开启方式：
+```env
+FREQTRADE_API_URL=http://freqtrade.local:8080
+FREQTRADE_API_USERNAME=...
+FREQTRADE_API_PASSWORD=...
+FREQTRADE_RECONCILE_ON_BLOCK=true
+```
+
+仅在 `execution.status == blocked` 且 payload 里带有 `trade_id` 时触发。调用失败会写 `freqtrade_reconcile` 审计事件，不会影响正常的 `/signal` 响应。
+
+## 告警通道
+
+为 "danger" 级事件提供一个统一的 webhook 出口：
+- 策略或外部信号被风控拦下
+- `/ui/halt` 或 `/admin/halt` 被触发
+- 其他 `classify_signal_result` 判定为 danger 的情况
+
+配置：
+```env
+ALERT_WEBHOOK_URL=https://my-hermes-relay/incoming
+ALERT_TIMEOUT_SECONDS=5
+```
+
+Webhook payload 示例（POST JSON body）：
+```json
+{
+  "event_type": "signal_blocked",
+  "level": "danger",
+  "symbol": "BTC-USDT-SWAP",
+  "side": "buy",
+  "risk_reasons": ["notional limit exceeded"],
+  "execution_status": "blocked",
+  "client_signal_id": "..."
+}
+```
+
+Fire-and-forget 语义：投递失败不会影响下单流程，审计日志仍记录原始事件。Hermes / Telegram 中继 / PagerDuty / 自定义 Slack relay 都可以订阅这个 URL。
+
+## 回测
+
+`src/agent_trader/backtest.py` 提供一个走 walk-forward 的回测引擎，**用的是同一个风控引擎**。目的不是找 alpha（freqtrade 在那件事上更强），而是"告诉我 freqtrade 调出来的策略里，哪些会被我们的风控拦住"。
+
+```python
+from agent_trader.backtest import run_backtest
+from agent_trader.strategy import Candle, EmaAtrConfig, generate_ema_atr_signal
+from agent_trader.models import RiskLimits
+
+candles = [Candle(ts=..., open=..., high=..., low=..., close=...) for _ in range(...)]
+report = run_backtest(
+    signal_generator=lambda sym, bars: generate_ema_atr_signal(sym, bars, EmaAtrConfig()),
+    candles_by_symbol={"BTC-USDT-SWAP": candles},
+    initial_equity_usd=10_000.0,
+    risk_limits=RiskLimits(
+        max_notional_usd=3000.0,
+        max_leverage=5.0,
+        daily_loss_limit_pct=5.0,
+        max_slippage_bps=50.0,
+        max_notional_per_symbol_usd=1500.0,
+    ),
+    allowed_symbols=("BTC-USDT-SWAP", "ETH-USDT-SWAP"),
+    risk_fraction=0.1,
+)
+print("PnL:", report.total_pnl_usd)
+print("Win rate:", report.win_rate)
+print("Blocked by reason:", report.block_reasons)
+```
+
+报告字段：`signals_total` / `signals_approved` / `signals_blocked` / `block_reasons`（按原因计数）/ `closed_trades`（每笔含 entry/exit/reason/PnL）/ `win_rate` / `max_drawdown_pct` / `total_pnl_usd` / `blocked_signals`（明细）。
+
 ## Hermes 管理面
 
 Hermes 跑在独立进程（不在这个 repo 里）。它只能通过 HMAC 签名的 HTTP 调用这里的服务，**既不持有 OKX 密钥，也改不了 `risk.py`**。

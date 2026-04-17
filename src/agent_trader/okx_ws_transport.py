@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import json
 from typing import Any, Awaitable, Callable, Optional
 
 
@@ -29,12 +30,19 @@ class AsyncWebSocketTransport:
     async def send(self, payload: Any) -> None:
         if self.connection is None:
             await self.connect()
-        await self.connection.send(payload)
+        serialized = json.dumps(payload) if isinstance(payload, (dict, list)) else payload
+        await self.connection.send(serialized)
 
     async def recv(self) -> Any:
         if self.connection is None:
             await self.connect()
-        return await self.connection.recv()
+        message = await self.connection.recv()
+        if isinstance(message, str):
+            try:
+                return json.loads(message)
+            except json.JSONDecodeError:
+                return message
+        return message
 
     async def close(self) -> None:
         if self.connection is None:

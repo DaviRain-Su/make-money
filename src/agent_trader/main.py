@@ -14,6 +14,7 @@ from agent_trader.okx_execution_service import execute_okx_trade_proposal
 from agent_trader.okx_ws import OKXWebSocketClient
 from agent_trader.proposal_service import build_trade_proposal
 from agent_trader.reconcile_job import reconcile_open_orders_job
+from agent_trader.alerting import classify_signal_result, push_alert
 from agent_trader.freqtrade_adapter import translate_freqtrade_webhook
 from agent_trader.freqtrade_reconciler import force_exit_trade
 from agent_trader.risk import evaluate_trade
@@ -230,6 +231,24 @@ def process_signal_payload(
 
 
 
+def _maybe_push_alert(
+    event_type: str,
+    level: str,
+    payload: Dict[str, Any],
+    current_settings: Optional[Settings] = None,
+) -> None:
+    resolved = current_settings or get_settings()
+    if not resolved.alert_webhook_url:
+        return
+    push_alert(
+        webhook_url=resolved.alert_webhook_url,
+        event_type=event_type,
+        level=level,
+        payload=payload,
+        timeout=resolved.alert_timeout_seconds,
+    )
+
+
 def emit_signal_audit_events(
     signal: StrategySignal,
     result: Dict[str, Any],
@@ -286,6 +305,18 @@ def emit_signal_audit_events(
         },
         current_settings=current_settings,
     )
+    alert_level = classify_signal_result(result)
+    if alert_level:
+        _maybe_push_alert(
+            "signal_blocked",
+            alert_level,
+            {
+                **base_payload,
+                "risk_reasons": result.get("risk", {}).get("reasons"),
+                "execution_status": execution.get("status"),
+            },
+            current_settings=current_settings,
+        )
 
 
 
@@ -552,6 +583,12 @@ def ui_halt_action(
             "reason": reason,
             "actor": actor,
         },
+    )
+    _maybe_push_alert(
+        "halt",
+        "danger",
+        {"source": "local_ui", "reason": reason, "actor": actor},
+        current_settings=resolved,
     )
     return {"trading_halted": state.trading_halted, "halt_reason": state.halt_reason, "halted_by": state.halted_by}
 

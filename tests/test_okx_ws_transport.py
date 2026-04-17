@@ -25,7 +25,7 @@ class FakeConnection:
 class AsyncWebSocketTransportTests(unittest.IsolatedAsyncioTestCase):
     async def test_connect_uses_factory_and_allows_send_recv_close(self):
         connection = FakeConnection()
-        connection.messages.append({"event": "ok"})
+        connection.messages.append('{"event": "ok"}')
 
         async def factory(url):
             self.assertEqual(url, "wss://example")
@@ -37,7 +37,7 @@ class AsyncWebSocketTransportTests(unittest.IsolatedAsyncioTestCase):
         msg = await transport.recv()
         await transport.close()
 
-        self.assertEqual(connection.sent, [{"ping": 1}])
+        self.assertEqual(connection.sent, ['{"ping": 1}'])
         self.assertEqual(msg, {"event": "ok"})
         self.assertTrue(connection.closed)
 
@@ -52,7 +52,7 @@ class AsyncWebSocketTransportTests(unittest.IsolatedAsyncioTestCase):
         await transport.send({"login": 1})
 
         self.assertIs(transport.connection, connection)
-        self.assertEqual(connection.sent, [{"login": 1}])
+        self.assertEqual(connection.sent, ['{"login": 1}'])
 
 
 if __name__ == "__main__":

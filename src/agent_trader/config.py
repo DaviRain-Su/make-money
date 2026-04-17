@@ -62,6 +62,9 @@ class Settings:
     freqtrade_api_username: str = ""
     freqtrade_api_password: str = ""
     freqtrade_reconcile_on_block: bool = False
+    # 告警 webhook（为空则全关）
+    alert_webhook_url: str = ""
+    alert_timeout_seconds: float = 5.0
 
 
 
@@ -153,4 +156,6 @@ def load_settings() -> Settings:
         freqtrade_api_username=os.getenv("FREQTRADE_API_USERNAME", ""),
         freqtrade_api_password=os.getenv("FREQTRADE_API_PASSWORD", ""),
         freqtrade_reconcile_on_block=_bool_env("FREQTRADE_RECONCILE_ON_BLOCK", False),
+        alert_webhook_url=os.getenv("ALERT_WEBHOOK_URL", ""),
+        alert_timeout_seconds=_float_env("ALERT_TIMEOUT_SECONDS", 5.0),
     )
