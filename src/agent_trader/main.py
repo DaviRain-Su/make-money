@@ -14,7 +14,7 @@ from agent_trader.okx_execution_service import execute_okx_trade_proposal
 from agent_trader.okx_ws import OKXWebSocketClient
 from agent_trader.proposal_service import build_trade_proposal
 from agent_trader.reconcile_job import reconcile_open_orders_job
-from agent_trader.alerting import classify_signal_result, push_alert
+from agent_trader.alerting import classify_signal_result, push_alert, push_level_alert
 from agent_trader.alt_screener import screen_okx_alt_swaps
 from agent_trader.freqtrade_adapter import translate_freqtrade_webhook
 from agent_trader.freqtrade_reconciler import force_exit_trade
@@ -239,15 +239,10 @@ def _maybe_push_alert(
     current_settings: Optional[Settings] = None,
 ) -> None:
     resolved = current_settings or get_settings()
-    if not resolved.alert_webhook_url:
-        return
-    push_alert(
-        webhook_url=resolved.alert_webhook_url,
-        event_type=event_type,
-        level=level,
-        payload=payload,
-        timeout=resolved.alert_timeout_seconds,
-    )
+    # Level-aware routing: push_level_alert consults the {level}-specific URL
+    # first and falls back to the generic alert_webhook_url. Missing URLs are
+    # silently skipped so callers don't need per-level guards.
+    push_level_alert(resolved, event_type=event_type, level=level, payload=payload)
 
 
 def emit_signal_audit_events(

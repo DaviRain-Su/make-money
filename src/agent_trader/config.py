@@ -74,8 +74,13 @@ class Settings:
     freqtrade_api_username: str = ""
     freqtrade_api_password: str = ""
     freqtrade_reconcile_on_block: bool = False
-    # 告警 webhook（为空则全关）
+    # 告警 webhook（为空则全关）。
+    # alert_webhook_url 是兜底通道，所有级别都会发这里。
+    # alert_webhook_{level}_url 针对 info / warn / danger 各自独立。
     alert_webhook_url: str = ""
+    alert_webhook_info_url: str = ""
+    alert_webhook_warn_url: str = ""
+    alert_webhook_danger_url: str = ""
     alert_timeout_seconds: float = 5.0
     monitor_snapshot_path: str = "var/state/monitor_snapshot.json"
     monitor_poll_seconds: int = 60
@@ -182,6 +187,9 @@ def load_settings() -> Settings:
         freqtrade_api_password=os.getenv("FREQTRADE_API_PASSWORD", ""),
         freqtrade_reconcile_on_block=_bool_env("FREQTRADE_RECONCILE_ON_BLOCK", False),
         alert_webhook_url=os.getenv("ALERT_WEBHOOK_URL", ""),
+        alert_webhook_info_url=os.getenv("ALERT_WEBHOOK_INFO_URL", ""),
+        alert_webhook_warn_url=os.getenv("ALERT_WEBHOOK_WARN_URL", ""),
+        alert_webhook_danger_url=os.getenv("ALERT_WEBHOOK_DANGER_URL", ""),
         alert_timeout_seconds=_float_env("ALERT_TIMEOUT_SECONDS", 5.0),
         monitor_snapshot_path=os.getenv("MONITOR_SNAPSHOT_PATH", "var/state/monitor_snapshot.json"),
         monitor_poll_seconds=_int_env("MONITOR_POLL_SECONDS", 60),

@@ -74,7 +74,7 @@ class MainAlertingTests(unittest.TestCase):
             "execution": {"status": "blocked"},
             "proposal": {"symbol": "BTC-USDT-SWAP", "position_action": "OPEN"},
         }
-        with patch("agent_trader.main.push_alert", return_value={"status": "ok"}) as mocked:
+        with patch("agent_trader.main.push_level_alert", return_value=[{"status": "ok"}]) as mocked:
             emit_signal_audit_events(
                 signal=_signal(),
                 result=result,
@@ -96,7 +96,7 @@ class MainAlertingTests(unittest.TestCase):
             "execution": {"status": "paper"},
             "proposal": {"symbol": "BTC-USDT-SWAP", "position_action": "OPEN"},
         }
-        with patch("agent_trader.main.push_alert") as mocked:
+        with patch("agent_trader.main.push_level_alert") as mocked:
             emit_signal_audit_events(
                 signal=_signal(),
                 result=result,
@@ -106,14 +106,17 @@ class MainAlertingTests(unittest.TestCase):
             )
         self.assertFalse(mocked.called)
 
-    def test_missing_webhook_disables_alert(self):
+    def test_missing_webhook_returns_empty_dispatch_list(self):
+        # No URLs configured → push_level_alert is still invoked, but returns
+        # [] because resolve_alert_urls sees no URL. Tests the end-result
+        # rather than the legacy early-bail internal shape.
         settings = _settings(self.tempdir.name, webhook="")
         result = {
             "risk": {"approved": False, "reasons": ["x"]},
             "execution": {"status": "blocked"},
             "proposal": {"symbol": "BTC-USDT-SWAP", "position_action": "OPEN"},
         }
-        with patch("agent_trader.main.push_alert") as mocked:
+        with patch("agent_trader.main.push_level_alert", return_value=[]) as mocked:
             emit_signal_audit_events(
                 signal=_signal(),
                 result=result,
@@ -121,11 +124,12 @@ class MainAlertingTests(unittest.TestCase):
                 symbol="BTC-USDT-SWAP",
                 client_signal_id="sig-3",
             )
-        self.assertFalse(mocked.called)
+        self.assertTrue(mocked.called)
+        self.assertEqual(mocked.return_value, [])
 
     def test_ui_halt_action_alerts_once(self):
         settings = _settings(self.tempdir.name)
-        with patch("agent_trader.main.push_alert", return_value={"status": "ok"}) as mocked:
+        with patch("agent_trader.main.push_level_alert", return_value=[{"status": "ok"}]) as mocked:
             ui_halt_action(reason="emergency", actor="me", current_settings=settings)
         self.assertEqual(mocked.call_count, 1)
         self.assertEqual(mocked.call_args.kwargs["event_type"], "halt")
