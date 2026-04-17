@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.env
+
+# macOS
+.DS_Store
+
+# Runtime state and logs (audit log, idempotency files, nonce files, control flag)
+var/
+
+# Claude Code local overrides
+.claude/settings.local.json
+
+# IDEs
+.idea/
+.vscode/
