@@ -635,6 +635,16 @@ def build_strategy_config(current_settings: Optional[Settings] = None) -> EmaAtr
     )
 
 
+def build_strategy_scheduler(current_settings: Optional[Settings] = None):
+    """Wire run_strategy_poll into a StrategyScheduler honoring STRATEGY_POLL_SECONDS."""
+    from agent_trader.strategy_scheduler import StrategyScheduler
+    resolved = current_settings or get_settings()
+    return StrategyScheduler(
+        runner=lambda: run_strategy_poll(current_settings=resolved),
+        poll_interval_seconds=resolved.strategy_poll_seconds,
+    )
+
+
 def run_strategy_poll(
     client: Optional[OKXClient] = None,
     current_settings: Optional[Settings] = None,
